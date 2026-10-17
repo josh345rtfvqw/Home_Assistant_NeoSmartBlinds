@@ -67,7 +67,7 @@ On the controller's entry, choose **Add blind**.
 | Extended top-down/bottom-up commands | Only for top-down/bottom-up blinds with `mb`, `ra`, `ap` or `db` motors. These use the newer `u4`/`d4`/`x2` command set; `tb` motors use the standard set. |
 | Supports tilt | Turn on for blinds whose slats tilt. Adds the tilt open/close controls (micro-steps). Off by default. Some motors, such as Wistar/Alpha (`wt`), ignore micro-steps. |
 | Positioning mode | See below. |
-| Close time | Seconds the blind takes to go from fully open to fully closed. Time it with a stopwatch. |
+| Close time | Seconds the blind takes to go from fully open to fully closed. Measure it afterwards with **Measure open and close times** (below), or use a stopwatch. |
 | Open time | Optional. Seconds from fully closed to fully open, if it differs from the close time (blinds often rise slower). Empty means the same as the close time. |
 | Re-sync when Home Assistant starts | Don't move the blind (default), Open fully, or Close fully. See [Keeping the position accurate](#keeping-the-position-accurate). |
 | Start position | Optional. The position to assume the first time, before Home Assistant has saved one (modes 1 and 2). After that the last known position is always restored. |
@@ -93,7 +93,7 @@ If you ask for a new position while the blind is moving, and the blind is alread
 
 The controller never reports where a blind is, so the position is an estimate. Home Assistant saves it and restores it after a restart.
 
-- **Set both times.** Time the blind closing *and* opening; if they differ, fill in **Open time** as well as **Close time**.
+- **Measure both times.** Open the blind's settings (Settings → Devices & services → NeoSmartBlinds → ⚙ next to the blind) and choose **Measure open and close times**. Home Assistant opens the blind, then times it closing and opening while you press **Submit** the moment it stops each time, and saves both times. You can also type them in yourself.
 - **Full open and close re-sync.** Opening or closing fully always runs the motor to its end stop, so the position is exact afterwards.
 - **Re-sync at startup.** The estimate drifts if the blind is moved with the Neo app or a remote. Set **Re-sync when Home Assistant starts** to *Open fully* or *Close fully* to move the blind to that end every time Home Assistant starts (not when the integration is merely reloaded). Remember this also happens after updates and restarts at night.
 

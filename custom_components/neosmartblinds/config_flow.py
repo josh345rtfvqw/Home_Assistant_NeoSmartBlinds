@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from collections.abc import Mapping
 from typing import Any
 
 import voluptuous as vol
+from homeassistant.components.cover import DOMAIN as COVER_DOMAIN
 from homeassistant.config_entries import (
     ConfigEntry,
+    ConfigEntryState,
     ConfigFlow,
     ConfigFlowResult,
     ConfigSubentry,
@@ -18,8 +21,10 @@ from homeassistant.config_entries import (
     OptionsFlow,
     SubentryFlowResult,
 )
-from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
+from homeassistant.const import ATTR_ENTITY_ID, CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import callback
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
     BooleanSelector,
@@ -495,6 +500,11 @@ class RoomNamesOptionsFlow(OptionsFlow):
         )
 
 
+def _monotonic() -> float:
+    """Stopwatch clock for measuring travel times."""
+    return time.monotonic()
+
+
 class BlindSubentryFlow(ConfigSubentryFlow):
     """Add or change a blind."""
 
@@ -535,6 +545,14 @@ class BlindSubentryFlow(ConfigSubentryFlow):
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
+        """Choose between changing the settings and measuring the travel times."""
+        return self.async_show_menu(
+            step_id="reconfigure", menu_options=["settings", "calibrate"]
+        )
+
+    async def async_step_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
         """Change a blind. Its unique id is kept so the entity stays the same."""
         subentry = self._get_reconfigure_subentry()
         errors: dict[str, str] = {}
@@ -550,9 +568,117 @@ class BlindSubentryFlow(ConfigSubentryFlow):
                     data=data,
                 )
         return self.async_show_form(
-            step_id="reconfigure",
+            step_id="settings",
             data_schema=self.add_suggested_values_to_schema(
                 _blind_schema(), user_input or _form_values(subentry)
             ),
             errors=errors,
+        )
+
+    # Measuring the travel times -------------------------------------------------
+    # The blind is driven through its cover entity so Home Assistant keeps track
+    # of where it is; the user presses Submit the moment it stops.
+
+    _cover: str
+    _started: float
+    _close_time: float
+    _open_time: float
+
+    async def _async_move(self, service: str) -> dict[str, str]:
+        """Start the blind moving; return form errors."""
+        try:
+            await self.hass.services.async_call(
+                COVER_DOMAIN, service, {ATTR_ENTITY_ID: self._cover}, blocking=True
+            )
+        except HomeAssistantError as err:
+            _LOGGER.warning("Couldn't move %s: %s", self._cover, err)
+            return {"base": "cannot_send"}
+        self._started = _monotonic()
+        return {}
+
+    def _calibrate_form(
+        self, step_id: str, errors: dict[str, str] | None = None
+    ) -> SubentryFlowResult:
+        return self.async_show_form(
+            step_id=step_id,
+            data_schema=vol.Schema({}),
+            errors=errors,
+            description_placeholders={"name": self._get_reconfigure_subentry().title},
+        )
+
+    async def async_step_calibrate(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Explain, then open the blind fully so timing starts from the top."""
+        if user_input is None:
+            entry = self._get_entry()
+            subentry = self._get_reconfigure_subentry()
+            if entry.state is not ConfigEntryState.LOADED:
+                return self.async_abort(reason="not_loaded")
+            cover = er.async_get(self.hass).async_get_entity_id(
+                COVER_DOMAIN, DOMAIN, subentry.unique_id or ""
+            )
+            if cover is None or self.hass.states.get(cover) is None:
+                return self.async_abort(reason="cover_unavailable")
+            self._cover = cover
+            return self._calibrate_form("calibrate")
+        if errors := await self._async_move("open_cover"):
+            return self._calibrate_form("calibrate", errors)
+        return self._calibrate_form("calibrate_close")
+
+    async def async_step_calibrate_close(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Once it's fully open, start closing and the stopwatch."""
+        if errors := await self._async_move("close_cover"):
+            return self._calibrate_form("calibrate_close", errors)
+        return self._calibrate_form("calibrate_closed")
+
+    async def async_step_calibrate_closed(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """The user pressed Submit when the blind stopped at the bottom."""
+        self._close_time = _monotonic() - self._started
+        return self._calibrate_form("calibrate_open")
+
+    async def async_step_calibrate_open(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Start opening and the stopwatch."""
+        if errors := await self._async_move("open_cover"):
+            return self._calibrate_form("calibrate_open", errors)
+        return self._calibrate_form("calibrate_opened")
+
+    async def async_step_calibrate_opened(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """The user pressed Submit when the blind stopped at the top."""
+        self._open_time = _monotonic() - self._started
+        return await self.async_step_calibrate_save()
+
+    async def async_step_calibrate_save(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        """Show the measured times and save them."""
+        close_time = max(1, round(self._close_time))
+        open_time = max(1, round(self._open_time))
+        if user_input is not None:
+            subentry = self._get_reconfigure_subentry()
+            return self.async_update_and_abort(
+                self._get_entry(),
+                subentry,
+                data={
+                    **subentry.data,
+                    CONF_CLOSE_TIME: close_time,
+                    CONF_OPEN_TIME: open_time,
+                },
+            )
+        return self.async_show_form(
+            step_id="calibrate_save",
+            data_schema=vol.Schema({}),
+            description_placeholders={
+                "name": self._get_reconfigure_subentry().title,
+                "close_time": str(close_time),
+                "open_time": str(open_time),
+            },
         )

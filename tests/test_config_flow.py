@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from homeassistant.components.cover import DOMAIN as COVER_DOMAIN
 from homeassistant.config_entries import SOURCE_RECONFIGURE, SOURCE_USER
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
@@ -17,6 +19,7 @@ from custom_components.neosmartblinds.const import (
     CONF_CLOSE_TIME,
     CONF_HUB_ID,
     CONF_MOTOR_CODE,
+    CONF_OPEN_TIME,
     CONF_PARENT,
     CONF_PERCENT_SUPPORT,
     CONF_PROTOCOL,
@@ -235,6 +238,10 @@ async def test_reconfigure_blind(
         (entry.entry_id, SUBENTRY_BLIND),
         context={"source": SOURCE_RECONFIGURE, "subentry_id": subentry_id},
     )
+    assert result["type"] is FlowResultType.MENU
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {"next_step_id": "settings"}
+    )
     assert result["type"] is FlowResultType.FORM
     result = await hass.config_entries.subentries.async_configure(
         result["flow_id"],
@@ -361,3 +368,73 @@ async def test_remove_blind(
     assert registry.async_get("cover.blind_two") is None
     assert hass.states.get("cover.blind_two") is None
     assert hass.states.get("cover.blind_one").state == "open"
+
+
+async def test_measure_travel_times(
+    hass: HomeAssistant, fake_controller: FakeController
+) -> None:
+    """The blind is opened, then timed closing and opening, and the times saved."""
+    entry = controller_entry(fake_controller, [blind_subentry(start_position=0)])
+    await setup_entry(hass, entry)
+    subentry_id = next(iter(entry.subentries))
+    result = await hass.config_entries.subentries.async_init(
+        (entry.entry_id, SUBENTRY_BLIND),
+        context={"source": SOURCE_RECONFIGURE, "subentry_id": subentry_id},
+    )
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {"next_step_id": "calibrate"}
+    )
+    assert result["step_id"] == "calibrate"
+    assert result["description_placeholders"]["name"] == "Blind One"
+
+    # open starts, close starts, closed, open starts, opened
+    clock = iter([0.0, 100.0, 123.4, 200.0, 227.6])
+    with patch(
+        "custom_components.neosmartblinds.config_flow._monotonic",
+        side_effect=lambda: next(clock),
+    ):
+        flow_id = result["flow_id"]
+        result = await hass.config_entries.subentries.async_configure(flow_id, {})
+        assert result["step_id"] == "calibrate_close"
+        assert fake_controller.actions == ["021.230-04-up"]
+        result = await hass.config_entries.subentries.async_configure(flow_id, {})
+        assert result["step_id"] == "calibrate_closed"
+        assert fake_controller.actions[-1] == "021.230-04-dn"
+        result = await hass.config_entries.subentries.async_configure(flow_id, {})
+        assert result["step_id"] == "calibrate_open"
+        result = await hass.config_entries.subentries.async_configure(flow_id, {})
+        assert result["step_id"] == "calibrate_opened"
+        assert fake_controller.actions[-1] == "021.230-04-up"
+        result = await hass.config_entries.subentries.async_configure(flow_id, {})
+
+    assert result["step_id"] == "calibrate_save"
+    assert result["description_placeholders"]["close_time"] == "23"
+    assert result["description_placeholders"]["open_time"] == "28"
+    result = await hass.config_entries.subentries.async_configure(flow_id, {})
+    assert result["reason"] == "reconfigure_successful"
+    data = entry.subentries[subentry_id].data
+    assert data[CONF_CLOSE_TIME] == 23
+    assert data[CONF_OPEN_TIME] == 28
+    assert data[CONF_BLIND_CODE] == "021.230-04"
+
+
+async def test_measure_needs_the_cover(
+    hass: HomeAssistant, fake_controller: FakeController
+) -> None:
+    """Measuring stops early if the blind's cover is disabled."""
+    entry = controller_entry(fake_controller, [blind_subentry()])
+    await setup_entry(hass, entry)
+    er.async_get(hass).async_update_entity(
+        "cover.blind_one", disabled_by=er.RegistryEntryDisabler.USER
+    )
+    await hass.async_block_till_done()
+    subentry_id = next(iter(entry.subentries))
+    result = await hass.config_entries.subentries.async_init(
+        (entry.entry_id, SUBENTRY_BLIND),
+        context={"source": SOURCE_RECONFIGURE, "subentry_id": subentry_id},
+    )
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {"next_step_id": "calibrate"}
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "cover_unavailable"
