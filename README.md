@@ -51,8 +51,7 @@ The second form has the port already filled in for the protocol you chose, plus:
 
 Home Assistant checks that it can open a connection to the controller. It does not send a command, so it cannot check the controller ID at this point. If the ID is wrong, the first command fails and Home Assistant asks you to re-enter it.
 
-![Getting the IP](doc_images/app_controller_ip.jpg)
-![App Controllers](doc_images/app_controllers.jpg)
+**Finding the IP address and controller ID in the Neo app:** open the menu (☰) and choose **Your Controllers**. Under each controller's name you'll see a long **ID** (about 24 characters, the controller ID) and an **IP** line. If you have more than one controller, use the one assigned to the room your blinds are in; a room's controller is shown under **Edit Room → Assign Smart Controller to room**.
 
 ### 2. Add blinds
 
@@ -73,7 +72,13 @@ On the controller's entry, choose **Add blind**.
 | Start position | Optional. The position to assume the first time, before Home Assistant has saved one (modes 1 and 2). After that the last known position is always restored. |
 | Room code (parent group) | Optional. The room code (ending `-15`) shared by blinds in the same room. See [Room commands](#room-commands). |
 
-![Blind Code](doc_images/app_blind_codes.jpg)
+**Finding the blind code, motor code and room code in the Neo app:** open the blind and go to its advanced page (**Advanced Controls**). Near the bottom it lists:
+
+- **Room Code**, for example `242.210-15`: use it as the room code (parent group).
+- **Blind Code**, for example `242.210-01`: use it as the blind code.
+- **Motor code**, for example `bf`: pick it in the motor code list.
+
+All blinds in the same room share the first part of the code (`242.210`); the last two digits are the blind's channel, and `15` means the whole room.
 
 To change a blind or the controller later, use **Reconfigure** on it. A blind keeps its entity when you change its settings. To remove a blind, open its menu (⋮) on the controller's entry and choose **Delete**.
 
@@ -193,6 +198,10 @@ Dependabot opens a pull request when an action used by the workflows has a new v
 ## Credits
 
 Version 3 is maintained by [@josh345rtfvqw](https://github.com/josh345rtfvqw). It builds on the original integration by [@4n0nD3v3l0p3r](https://github.com/4n0nD3v3l0p3r/Home_Assistant_NeoSmartBlinds) and the 2.x fork by [@mtgeekman](https://github.com/mtgeekman/Home_Assistant_NeoSmartBlinds), with contributions from [@clara-j](https://github.com/clara-j) and [@gee-jay-bee](https://github.com/gee-jay-bee).
+
+## License
+
+[MIT](LICENSE).
 
 ## Reporting a problem
 
