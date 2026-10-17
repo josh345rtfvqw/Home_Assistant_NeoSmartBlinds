@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from datetime import timedelta
+from unittest.mock import patch
 
 import pytest
 from freezegun.api import FrozenDateTimeFactory
@@ -38,6 +40,7 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.neosmartblinds.blind import blind_unique_id
+from custom_components.neosmartblinds.button import NeoFavouriteButton
 from custom_components.neosmartblinds.const import DOMAIN
 
 from .conftest import (
@@ -48,6 +51,15 @@ from .conftest import (
 )
 
 COVER = "cover.blind_one"
+
+
+@pytest.fixture
+def favourite_buttons_enabled() -> Generator[None]:
+    """Create the favourite buttons enabled, as if the user had turned them on."""
+    with patch.object(
+        NeoFavouriteButton, "_attr_entity_registry_enabled_default", True
+    ):
+        yield
 
 
 async def _call(hass: HomeAssistant, service: str, **data) -> None:
@@ -71,7 +83,7 @@ def _position(hass: HomeAssistant) -> int:
 async def test_setup_creates_entities(
     hass: HomeAssistant, fake_controller: FakeController
 ) -> None:
-    """A cover and two favourite buttons are created on a device per blind."""
+    """A cover and two disabled favourite buttons are created per blind."""
     entry = controller_entry(
         fake_controller, [blind_subentry(motor_code="no", tilt=True)]
     )
@@ -83,9 +95,12 @@ async def test_setup_creates_entities(
     assert features & CoverEntityFeature.SET_POSITION
     assert features & CoverEntityFeature.OPEN_TILT
     assert not features & CoverEntityFeature.SET_TILT_POSITION
-    assert hass.states.get("button.blind_one_favourite_position_1")
-    assert hass.states.get("button.blind_one_favourite_position_2")
-    ent = er.async_get(hass).async_get(COVER)
+    ent_reg = er.async_get(hass)
+    for number in (1, 2):
+        button = ent_reg.async_get(f"button.blind_one_favourite_position_{number}")
+        # The controller can't tell us whether a favourite is saved
+        assert button.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    ent = ent_reg.async_get(COVER)
     assert ent.unique_id == "neosmartblinds.021.230-04.no.1"
     assert ent.config_subentry_id in entry.subentries
 
@@ -215,6 +230,7 @@ async def test_favourite_only_restores_closed(
     assert hass.states.get(COVER).state == CoverState.CLOSED
 
 
+@pytest.mark.usefixtures("favourite_buttons_enabled")
 async def test_buttons_and_tilt(
     hass: HomeAssistant, fake_controller: FakeController
 ) -> None:

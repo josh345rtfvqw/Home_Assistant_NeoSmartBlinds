@@ -9,7 +9,7 @@ Version 3 is a rewrite. It is set up from the UI, and existing YAML configuratio
 For each blind:
 
 - a **cover** entity: open, close, stop, set position (modes 1 and 2) and, if you turn on **Supports tilt**, tilt (micro-step up and down);
-- a **Favourite position 1** button, plus **Favourite position 2** for NEO (`no`) and Raex (`rx`) motors, or when no motor code is set.
+- a **Favourite position 1** button, plus **Favourite position 2** for NEO (`no`) and Raex (`rx`) motors, or when no motor code is set. These are **disabled by default**, because the controller can't tell Home Assistant whether a favourite has been saved. Save one in the Neo app (the blind's advanced page → **Set Favorite 1/2**) or with the blind's remote, then enable the button from the blind's device page.
 
 Each blind is its own device, linked to a device for the controller.
 
@@ -108,7 +108,7 @@ If a YAML entry can't be imported (for example, a blind code in the wrong format
 
 ### What changed
 
-- **The tilt slider no longer selects favourites.** Use the **Favourite position 1/2** buttons. Tilt open/close still send micro-steps, but only show when **Supports tilt** is turned on for the blind (it's off for imported blinds).
+- **The tilt slider no longer selects favourites.** Use the **Favourite position 1/2** buttons (new blinds get them disabled; enable them on the device page). Tilt open/close still send micro-steps, but only show when **Supports tilt** is turned on for the blind (it's off for imported blinds).
 - Everything is set up from the UI. `protocol` is no longer case-sensitive, and the port is filled in for the protocol (8838 for HTTP, 8839 for TCP).
 - `rail` accepts `3` (both rails), and there is an option for the extended top-down/bottom-up command set (`u4`/`d4`/`x2`).
 - Errors from the controller are shown when a command fails, instead of only being logged. A rejected controller ID starts a re-authentication flow.

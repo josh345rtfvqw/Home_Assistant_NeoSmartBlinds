@@ -30,6 +30,9 @@ class NeoFavouriteButton(ButtonEntity):
 
     _attr_has_entity_name = True
     _attr_should_poll = False
+    # The controller can't say whether a favourite has been saved on the blind,
+    # so leave the buttons for the user to enable once they've set one.
+    _attr_entity_registry_enabled_default = False
 
     def __init__(self, blind: NeoBlind, number: int) -> None:
         """Initialise the button."""
