@@ -98,7 +98,7 @@ async def test_setup_creates_entities(
     assert not features & CoverEntityFeature.SET_TILT_POSITION
     ent_reg = er.async_get(hass)
     for number in (1, 2):
-        button = ent_reg.async_get(f"button.blind_one_favourite_position_{number}")
+        button = ent_reg.async_get(f"button.blind_one_favorite_position_{number}")
         # The controller can't tell us whether a favourite is saved
         assert button.disabled_by is er.RegistryEntryDisabler.INTEGRATION
     ent = ent_reg.async_get(COVER)
@@ -241,11 +241,11 @@ async def test_buttons_and_tilt(
         hass, controller_entry(fake_controller, [blind_subentry(tilt=True)])
     )
     # bf motors don't document i2, so only favourite 1 exists
-    assert hass.states.get("button.blind_one_favourite_position_2") is None
+    assert hass.states.get("button.blind_one_favorite_position_2") is None
     await hass.services.async_call(
         BUTTON_DOMAIN,
         SERVICE_PRESS,
-        {ATTR_ENTITY_ID: "button.blind_one_favourite_position_1"},
+        {ATTR_ENTITY_ID: "button.blind_one_favorite_position_1"},
         blocking=True,
     )
     await _call(hass, SERVICE_OPEN_COVER_TILT)
@@ -496,7 +496,7 @@ async def test_migration_disables_existing_favourite_buttons(
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
 
-    assert entry.minor_version == 2
+    assert entry.minor_version == 3
     assert (
         ent_reg.async_get(one.entity_id).disabled_by
         is er.RegistryEntryDisabler.INTEGRATION

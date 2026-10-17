@@ -35,7 +35,7 @@ from .conftest import (
 )
 
 ROOM = "021.230-15"
-CONNECTION = "binary_sensor.neo_controller_127_0_0_1_connection"
+CONNECTION = "binary_sensor.neo_smart_controller_127_0_0_1_connection"
 
 
 def _room_device(hass: HomeAssistant) -> dr.DeviceEntry:
@@ -197,3 +197,29 @@ async def test_send_command_rejects_bad_commands(
             blocking=True,
         )
     assert fake_controller.received == []
+
+
+async def test_migration_renames_default_controller_title(
+    hass: HomeAssistant, fake_controller: FakeController
+) -> None:
+    """Old default titles become "Neo Smart Controller (<host>)"; custom ones stay."""
+    old = controller_entry(fake_controller, [blind_subentry()], minor_version=2)
+    old.add_to_hass(hass)
+    hass.config_entries.async_update_entry(old, title="Neo controller (127.0.0.1)")
+    assert await hass.config_entries.async_setup(old.entry_id)
+    await hass.async_block_till_done()
+    assert old.title == "Neo Smart Controller (127.0.0.1)"
+    assert old.minor_version == 3
+
+
+async def test_migration_keeps_custom_controller_title(
+    hass: HomeAssistant, fake_controller: FakeController
+) -> None:
+    """A controller the user renamed keeps its name."""
+    entry = controller_entry(fake_controller, [blind_subentry()], minor_version=2)
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(entry, title="Upstairs")
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.title == "Upstairs"
+    assert entry.minor_version == 3

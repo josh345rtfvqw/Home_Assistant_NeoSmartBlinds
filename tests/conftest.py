@@ -142,13 +142,13 @@ def controller_entry(
     controller: FakeController,
     subentries: list[ConfigSubentryData],
     protocol: str = "http",
-    minor_version: int = 2,
+    minor_version: int = 3,
     port: int | None = None,
 ) -> MockConfigEntry:
     """Build a controller config entry pointing at the fake controller."""
     return MockConfigEntry(
         domain=DOMAIN,
-        title="Neo controller (127.0.0.1)",
+        title="Neo Smart Controller (127.0.0.1)",
         unique_id=HUB_ID,
         data={
             CONF_HOST: "127.0.0.1",

@@ -14,7 +14,14 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import NeoClient
 from .blind import NeoBlind
-from .const import CONF_HUB_ID, CONF_PARENT, CONF_PROTOCOL, DOMAIN, SUBENTRY_BLIND
+from .const import (
+    CONF_HUB_ID,
+    CONF_PARENT,
+    CONF_PROTOCOL,
+    DOMAIN,
+    SUBENTRY_BLIND,
+    controller_title,
+)
 from .group import NeoGroup
 
 _LOGGER = logging.getLogger(__name__)
@@ -40,7 +47,7 @@ def controller_identifier(entry: ConfigEntry) -> tuple[str, str]:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: NeoConfigEntry) -> bool:
-    """Set up a Neo controller from a config entry."""
+    """Set up a Neo Smart Controller from a config entry."""
     client = NeoClient(
         host=entry.data[CONF_HOST],
         port=entry.data[CONF_PORT],
@@ -94,6 +101,13 @@ async def async_migrate_entry(hass: HomeAssistant, entry: NeoConfigEntry) -> boo
                 )
         hass.config_entries.async_update_entry(entry, minor_version=2)
         _LOGGER.debug("Migrated %s to version 1.2", entry.title)
+    if entry.minor_version < 3:
+        # 1.3: controllers are titled "Neo Smart Controller (<host>)". Only rename
+        # entries still using the old default title, not ones the user renamed.
+        title = entry.title
+        if title == f"Neo controller ({entry.data[CONF_HOST]})":
+            title = controller_title(entry.data[CONF_HOST])
+        hass.config_entries.async_update_entry(entry, title=title, minor_version=3)
     return True
 
 

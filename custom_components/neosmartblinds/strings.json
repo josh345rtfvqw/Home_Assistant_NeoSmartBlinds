@@ -69,7 +69,7 @@
       "blind_imported": "The blind was added to an existing controller.",
       "invalid_protocol": "Protocol must be http or tcp.",
       "invalid_blind_code": "The blind code must use the format 000.000-00.",
-      "invalid_parent_group": "The parent group must use the format 000.000-15.",
+      "invalid_parent_group": "The room code must use the format 000.000-15.",
       "invalid_rail": "Rail must be 1, 2 or 3.",
       "invalid_percent_support": "percent_support must be 0, 1 or 2."
     }
@@ -95,7 +95,7 @@
             "open_time": "Open time",
             "startup_sync": "Re-sync when Home Assistant starts",
             "start_position": "Start position",
-            "parent_group": "Room code (parent group)"
+            "parent_group": "Room code"
           },
           "data_description": {
             "name": "How the blind is named in Home Assistant, for example Kitchen left.",
@@ -104,11 +104,11 @@
             "rail": "For top-down/bottom-up blinds (the Neo app shows Top-D/Bottom-U: YES). Ordinary blinds use the top rail.",
             "tdbu_extended": "Only for top-down/bottom-up blinds whose motor code is mb, ra, ap or db. Leave off for tb motors and ordinary blinds.",
             "tilt": "Turn on for blinds whose slats tilt. Adds tilt open and close controls (the side arrows), which send the motor small micro-steps. Leave off for roller blinds. Some motors, such as Wistar/Alpha (wt), ignore micro-steps.",
-            "percent_support": "The controller never reports where a blind is, so Home Assistant estimates it from the close time. Choose mode 1 only if the % position switch works for this blind in the Neo app. Modes 1 and 2 show a position slider; mode 0 shows up, stop and down buttons.",
+            "percent_support": "The controller never reports where a blind is, so Home Assistant estimates it from the open and close times. Choose \"Blind moves to the position\" only if the % position switch works for this blind in the Neo app. Both position options show a position slider; \"Open and close only\" shows up, stop and down buttons.",
             "close_time": "Seconds the blind takes to go from fully open to fully closed. Not shown in the Neo app. Once the blind is added, open its settings and choose Measure open and close times to time it for you, or use a stopwatch.",
             "open_time": "Optional. Seconds the blind takes to go from fully closed to fully open, if that differs from the close time (blinds often rise slower). Leave empty to use the close time.",
             "startup_sync": "Home Assistant can't ask the controller where a blind is, so the estimate drifts when someone uses the remote or the Neo app. Choose open or close to move the blind fully that way whenever Home Assistant starts, so the position is known again. Updates and restarts will move the blind.",
-            "start_position": "Optional. The position (0 closed, 100 open) to assume the first time, before Home Assistant has saved one, in modes 1 and 2. After that the last known position is always restored.",
+            "start_position": "Optional. The position (0 closed, 100 open) to assume the first time, before Home Assistant has saved one. Only used with a position option. After that the last known position is always restored.",
             "parent_group": "Optional. The Room Code from the blind's settings page in the Neo app (ends in -15). When every blind with the same room code gets the same command within 250 ms, one room command is sent instead."
           }
         },
@@ -133,7 +133,7 @@
             "open_time": "Open time",
             "startup_sync": "Re-sync when Home Assistant starts",
             "start_position": "Start position",
-            "parent_group": "Room code (parent group)"
+            "parent_group": "Room code"
           },
           "data_description": {
             "name": "How the blind is named in Home Assistant, for example Kitchen left.",
@@ -142,11 +142,11 @@
             "rail": "For top-down/bottom-up blinds (the Neo app shows Top-D/Bottom-U: YES). Ordinary blinds use the top rail.",
             "tdbu_extended": "Only for top-down/bottom-up blinds whose motor code is mb, ra, ap or db. Leave off for tb motors and ordinary blinds.",
             "tilt": "Turn on for blinds whose slats tilt. Adds tilt open and close controls (the side arrows), which send the motor small micro-steps. Leave off for roller blinds. Some motors, such as Wistar/Alpha (wt), ignore micro-steps.",
-            "percent_support": "The controller never reports where a blind is, so Home Assistant estimates it from the close time. Choose mode 1 only if the % position switch works for this blind in the Neo app. Modes 1 and 2 show a position slider; mode 0 shows up, stop and down buttons.",
+            "percent_support": "The controller never reports where a blind is, so Home Assistant estimates it from the open and close times. Choose \"Blind moves to the position\" only if the % position switch works for this blind in the Neo app. Both position options show a position slider; \"Open and close only\" shows up, stop and down buttons.",
             "close_time": "Seconds the blind takes to go from fully open to fully closed. Not shown in the Neo app. Once the blind is added, open its settings and choose Measure open and close times to time it for you, or use a stopwatch.",
             "open_time": "Optional. Seconds the blind takes to go from fully closed to fully open, if that differs from the close time (blinds often rise slower). Leave empty to use the close time.",
             "startup_sync": "Home Assistant can't ask the controller where a blind is, so the estimate drifts when someone uses the remote or the Neo app. Choose open or close to move the blind fully that way whenever Home Assistant starts, so the position is known again. Updates and restarts will move the blind.",
-            "start_position": "Optional. The position (0 closed, 100 open) to assume the first time, before Home Assistant has saved one, in modes 1 and 2. After that the last known position is always restored.",
+            "start_position": "Optional. The position (0 closed, 100 open) to assume the first time, before Home Assistant has saved one. Only used with a position option. After that the last known position is always restored.",
             "parent_group": "Optional. The Room Code from the blind's settings page in the Neo app (ends in -15). When every blind with the same room code gets the same command within 250 ms, one room command is sent instead."
           }
         },
@@ -180,7 +180,7 @@
         "invalid_motor_code": "Motor codes are two letters or digits, for example bf.",
         "tdbu_extended_motor": "The extended command set only applies to motor codes mb, ra, ap and db.",
         "parent_is_blind": "The room code must differ from the blind code.",
-        "position_not_supported": "Sending positions needs the top rail, the standard command set and a motor code of no, db, ra, rb, ap, bl, mb or jo. Use mode 2 instead.",
+        "position_not_supported": "\"Blind moves to the position\" needs the top rail, the standard command set and a motor code of no, db, ra, rb, ap, bl, mb or jo. Use \"Timed position (estimated)\" instead.",
         "already_configured": "This blind and rail are already set up on this controller.",
         "cannot_send": "Couldn't send the command to the controller. Check that it's online and try again."
       },
@@ -207,9 +207,9 @@
     },
     "percent_support": {
       "options": {
-        "0": "0 - Favourites only: open, close, stop and favourites",
-        "1": "1 - Send position to the blind (motor must support positions)",
-        "2": "2 - Emulate position: move up or down, then stop after the calculated time"
+        "0": "Open and close only: up, stop and down buttons, no position",
+        "1": "Blind moves to the position: Home Assistant sends the % to the motor",
+        "2": "Timed position (estimated): moves up or down, then stops after the calculated time"
       }
     },
     "startup_sync": {
@@ -223,10 +223,10 @@
   "entity": {
     "button": {
       "favourite_1": {
-        "name": "Favourite position 1"
+        "name": "Favorite position 1"
       },
       "favourite_2": {
-        "name": "Favourite position 2"
+        "name": "Favorite position 2"
       }
     },
     "binary_sensor": {
@@ -245,7 +245,7 @@
   },
   "issues": {
     "yaml_import_failed": {
-      "title": "NeoSmartBlinds YAML blind could not be imported",
+      "title": "Neo Smart Blinds YAML blind could not be imported",
       "description": "The blind {name} in configuration.yaml could not be imported ({reason}). Fix it in YAML and restart, or add it from the UI, then remove the YAML entry."
     }
   },
@@ -263,7 +263,7 @@
   "services": {
     "send_command": {
       "name": "Send command",
-      "description": "Sends a raw Neo action to a blind, or to a whole room through its room cover. Use at your own risk: commands may do nothing on your motor, and some are programming commands that can change the blind's settings (limits, direction, favourites or pairing), which may leave it unusable until your installer sets it up again. Home Assistant's position estimate isn't changed.",
+      "description": "Sends a raw Neo action to a blind, or to a whole room through its room cover. Use at your own risk: commands may do nothing on your motor, and some are programming commands that can change the blind's settings (limits, direction, favorites or pairing), which may leave it unusable until your installer sets it up again. Home Assistant's position estimate isn't changed.",
       "fields": {
         "command": {
           "name": "Command",

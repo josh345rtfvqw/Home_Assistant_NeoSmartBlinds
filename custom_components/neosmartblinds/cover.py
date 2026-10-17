@@ -148,7 +148,7 @@ async def async_setup_platform(
         translation_key="deprecated_yaml",
         translation_placeholders={
             "domain": DOMAIN,
-            "integration_title": "NeoSmartBlinds",
+            "integration_title": "Neo Smart Blinds",
         },
     )
 

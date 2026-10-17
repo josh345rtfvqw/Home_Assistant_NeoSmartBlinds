@@ -1,6 +1,6 @@
 {
   "domain": "neosmartblinds",
-  "name": "NeoSmartBlinds",
+  "name": "Neo Smart Blinds",
   "codeowners": ["@josh345rtfvqw"],
   "config_flow": true,
   "dependencies": [],
@@ -9,5 +9,5 @@
   "iot_class": "assumed_state",
   "issue_tracker": "https://github.com/josh345rtfvqw/Home_Assistant_NeoSmartBlinds/issues",
   "requirements": [],
-  "version": "3.6.2"
+  "version": "3.7.0"
 }

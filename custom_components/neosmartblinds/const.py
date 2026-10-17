@@ -29,6 +29,12 @@ CONF_ROOM_NAMES: Final = "room_names"  # room code -> name
 
 SUBENTRY_BLIND: Final = "blind"
 
+
+def controller_title(host: str) -> str:
+    """Return the title given to a controller entry."""
+    return f"Neo Smart Controller ({host})"
+
+
 PROTOCOL_HTTP: Final = "http"
 PROTOCOL_TCP: Final = "tcp"
 DEFAULT_PORTS: Final = {PROTOCOL_HTTP: 8838, PROTOCOL_TCP: 8839}
