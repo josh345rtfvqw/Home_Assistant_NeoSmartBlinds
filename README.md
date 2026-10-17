@@ -190,6 +190,10 @@ Bump `version` in `custom_components/neosmartblinds/manifest.json` and push to `
 
 Dependabot opens a pull request when an action used by the workflows has a new version.
 
+## Credits
+
+Version 3 is maintained by [@josh345rtfvqw](https://github.com/josh345rtfvqw). It builds on the original integration by [@4n0nD3v3l0p3r](https://github.com/4n0nD3v3l0p3r/Home_Assistant_NeoSmartBlinds) and the 2.x fork by [@mtgeekman](https://github.com/mtgeekman/Home_Assistant_NeoSmartBlinds), with contributions from [@clara-j](https://github.com/clara-j) and [@gee-jay-bee](https://github.com/gee-jay-bee).
+
 ## Reporting a problem
 
 Open an [issue](https://github.com/josh345rtfvqw/Home_Assistant_NeoSmartBlinds/issues) and attach the diagnostics: Settings → Devices & services → NeoSmartBlinds → ⋮ on the controller → **Download diagnostics**. They include your blind settings, the connection status and the last 20 commands with their results; the controller's address and ID are removed.
