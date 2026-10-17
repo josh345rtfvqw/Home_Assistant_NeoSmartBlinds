@@ -17,6 +17,13 @@ For each **room code** shared by two or more blinds, there is also a **room cove
 
 The controller device has a **Connection** sensor (under Diagnostics). It's on while the controller answers: it updates with every command, and Home Assistant also checks every 5 minutes that the controller accepts a connection, without sending a command.
 
+Home Assistant also shows a **notification** (the bell in the sidebar) when:
+
+- **the controller stops answering.** It goes away by itself when the controller answers again.
+- **a command isn't sent**, whether it came from the dashboard, an automation, a script or an action. There's one notice per blind (or room), naming the blind and the command. It goes away the next time a command to that blind is sent.
+
+A rejected controller ID doesn't add a notification; Home Assistant asks you to re-enter the ID instead.
+
 The controller never reports where a blind is, so the position is always an estimate based on how long the blind takes to close. The cover is marked as an assumed state, so Home Assistant shows open and close buttons instead of a toggle.
 
 ## Installation
