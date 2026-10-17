@@ -109,6 +109,20 @@ The **room cover** uses this: opening, closing, stopping or positioning it sends
 
 All commands to a controller are queued and spaced at least 0.7 s apart, as the controller's documentation asks.
 
+### Sending other commands
+
+The **NeoSmartBlinds: Send command** action (`neosmartblinds.send_command`) sends any two-character Neo action to a blind, or to a whole room through its room cover. Use it for commands the cover doesn't offer, such as `i1`/`i2` (intermediate positions on NEO motors), `u4`/`d4` (middle rail on extended top-down/bottom-up blinds) or micro-steps on a blind without **Supports tilt**. The blind's motor code is added for you. See the [protocol reference](#protocol-reference) for the actions.
+
+```yaml
+action: neosmartblinds.send_command
+target:
+  entity_id: cover.front_blind
+data:
+  command: i1
+```
+
+Home Assistant can't tell what a raw command did, so the blind's estimated position isn't changed.
+
 ## Upgrading from 2.x
 
 Your `cover: - platform: neosmartblinds` YAML entries are imported when Home Assistant starts:

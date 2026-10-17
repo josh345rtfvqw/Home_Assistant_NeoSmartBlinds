@@ -41,6 +41,11 @@ SYNC_OPEN: Final = "open"
 SYNC_CLOSE: Final = "close"
 
 BLIND_CODE_RE: Final = re.compile(r"^\d{3}\.\d{3}-\d{2}$")
+# An action is two letters or digits: up, dn, mu, i1, u4, 01-99, ...
+ACTION_RE: Final = re.compile(r"^[a-z0-9]{2}$")
+
+SERVICE_SEND_COMMAND: Final = "send_command"
+ATTR_COMMAND: Final = "command"
 
 # percent_support modes
 LEGACY_POSITIONING: Final = 0  # favourites only

@@ -1,0 +1,11 @@
+send_command:
+  target:
+    entity:
+      integration: neosmartblinds
+      domain: cover
+  fields:
+    command:
+      required: true
+      example: "mu"
+      selector:
+        text:

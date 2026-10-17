@@ -174,11 +174,17 @@ class NeoBlind:
             via_device=(DOMAIN, self.entry.unique_id or self.entry.entry_id),
         )
 
-    async def async_send(self, action: str, *, use_group: bool = True) -> None:
-        """Send an action, through the room group when one is configured."""
-        command = BlindCommand(self.code, action, self.motor_code)
+    async def async_send(
+        self, action: str, *, use_group: bool = True, code: str | None = None
+    ) -> None:
+        """Send an action, through the room group when one is configured.
+
+        code sends the action to another blind or room code with this blind's
+        motor code (used by the room cover), bypassing the group.
+        """
+        command = BlindCommand(code or self.code, action, self.motor_code)
         try:
-            if use_group and self._group is not None:
+            if use_group and code is None and self._group is not None:
                 await self._group.async_send(self.unique_id, command)
             else:
                 await self._client.async_send(command)

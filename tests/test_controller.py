@@ -5,6 +5,8 @@ from __future__ import annotations
 import socket
 from datetime import timedelta
 
+import pytest
+import voluptuous as vol
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.components.cover import DOMAIN as COVER_DOMAIN
 from homeassistant.const import ATTR_ENTITY_ID, SERVICE_OPEN_COVER, STATE_OFF, STATE_ON
@@ -14,7 +16,12 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
-from custom_components.neosmartblinds.const import CONF_ROOM_NAMES, DOMAIN
+from custom_components.neosmartblinds.const import (
+    ATTR_COMMAND,
+    CONF_ROOM_NAMES,
+    DOMAIN,
+    SERVICE_SEND_COMMAND,
+)
 from custom_components.neosmartblinds.diagnostics import (
     async_get_config_entry_diagnostics,
 )
@@ -144,3 +151,49 @@ async def test_diagnostics(
     commands = [r["command"] for r in diag["connection"]["recent"]]
     assert "connection check" in commands
     assert "021.230-01-up!bf" in commands
+
+
+async def test_send_command(
+    hass: HomeAssistant, fake_controller: FakeController
+) -> None:
+    """send_command sends a raw action with the blind's motor code."""
+    await setup_entry(hass, controller_entry(fake_controller, _room_blinds()))
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_SEND_COMMAND,
+        {ATTR_ENTITY_ID: "cover.left", ATTR_COMMAND: " MU "},
+        blocking=True,
+    )
+    assert fake_controller.received == ["021.230-01-mu!bf"]
+    # The position estimate isn't touched
+    assert hass.states.get("cover.left").state not in ("opening", "closing")
+
+
+async def test_send_command_to_room(
+    hass: HomeAssistant, fake_controller: FakeController
+) -> None:
+    """On a room cover, send_command goes to the room code as one command."""
+    await setup_entry(hass, controller_entry(fake_controller, _room_blinds()))
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_SEND_COMMAND,
+        {ATTR_ENTITY_ID: "cover.room_021_230_15", ATTR_COMMAND: "i1"},
+        blocking=True,
+    )
+    assert fake_controller.received == [f"{ROOM}-i1!bf"]
+
+
+@pytest.mark.parametrize("command", ["up!bf", "x", "abc", "0-1", ""])
+async def test_send_command_rejects_bad_commands(
+    hass: HomeAssistant, fake_controller: FakeController, command: str
+) -> None:
+    """Only two-character actions are accepted."""
+    await setup_entry(hass, controller_entry(fake_controller, _room_blinds()))
+    with pytest.raises(vol.Invalid):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SEND_COMMAND,
+            {ATTR_ENTITY_ID: "cover.left", ATTR_COMMAND: command},
+            blocking=True,
+        )
+    assert fake_controller.received == []

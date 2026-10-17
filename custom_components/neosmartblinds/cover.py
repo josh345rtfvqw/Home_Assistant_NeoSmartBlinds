@@ -44,7 +44,10 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.entity_platform import (
+    AddConfigEntryEntitiesCallback,
+    async_get_current_platform,
+)
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.start import async_at_started
@@ -54,6 +57,8 @@ from homeassistant.util import dt as dt_util
 from . import NeoConfigEntry, controller_identifier
 from .blind import NeoBlind, shared_rooms
 from .const import (
+    ACTION_RE,
+    ATTR_COMMAND,
     CONF_BLIND_CODE,
     CONF_CLOSE_TIME,
     CONF_HUB_ID,
@@ -67,6 +72,7 @@ from .const import (
     DOMAIN,
     EXPLICIT_POSITIONING,
     LEGACY_POSITIONING,
+    SERVICE_SEND_COMMAND,
     SYNC_NONE,
     SYNC_OPEN,
 )
@@ -153,6 +159,11 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up a cover for each blind subentry, and one per shared room code."""
+    async_get_current_platform().async_register_entity_service(
+        SERVICE_SEND_COMMAND,
+        {vol.Required(ATTR_COMMAND): _action},
+        "async_send_command",
+    )
     runtime = entry.runtime_data
     covers: list[NeoSmartBlindsCover] = []
     for subentry_id, blind in runtime.blinds.items():
@@ -173,6 +184,16 @@ async def async_setup_entry(
     ]
     if rooms:
         async_add_entities(rooms)
+
+
+def _action(value: Any) -> str:
+    """Validate a raw action such as mu, i1 or 42."""
+    action = cv.string(value).strip().lower()
+    if not ACTION_RE.match(action):
+        raise vol.Invalid(
+            "A command is two letters or digits, for example mu, i1 or 42"
+        )
+    return action
 
 
 @dataclass
@@ -222,9 +243,7 @@ class NeoSmartBlindsCover(CoverEntity, RestoreEntity):
         self._attr_unique_id = blind.unique_id
         self._attr_device_info = blind.device_info
         features = (
-            CoverEntityFeature.OPEN
-            | CoverEntityFeature.CLOSE
-            | CoverEntityFeature.STOP
+            CoverEntityFeature.OPEN | CoverEntityFeature.CLOSE | CoverEntityFeature.STOP
         )
         # Without positioning the more-info dialog shows open/stop/close buttons
         # instead of a slider that can't do anything useful.
@@ -365,6 +384,10 @@ class NeoSmartBlindsCover(CoverEntity, RestoreEntity):
         """Stop moving."""
         await self._blind.async_stop()
         self._halt()
+
+    async def async_send_command(self, command: str) -> None:
+        """Send a raw action to the blind. The position estimate is not changed."""
+        await self._blind.async_send(command, use_group=False)
 
     async def async_open_cover_tilt(self, **kwargs: Any) -> None:
         """Micro-step up."""
@@ -528,6 +551,7 @@ class NeoRoomCover(CoverEntity):
     ) -> None:
         """Initialise the room cover."""
         self._members = members
+        self._code = group.code
         self._attr_unique_id = f"{DOMAIN}.{group.code}.room"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._attr_unique_id)},
@@ -540,9 +564,7 @@ class NeoRoomCover(CoverEntity):
         features = (
             CoverEntityFeature.OPEN | CoverEntityFeature.CLOSE | CoverEntityFeature.STOP
         )
-        if all(
-            m.supported_features & CoverEntityFeature.SET_POSITION for m in members
-        ):
+        if all(m.supported_features & CoverEntityFeature.SET_POSITION for m in members):
             features |= CoverEntityFeature.SET_POSITION
         self._attr_supported_features = features
 
@@ -604,3 +626,9 @@ class NeoRoomCover(CoverEntity):
     async def async_set_cover_position(self, **kwargs: Any) -> None:
         """Move every blind in the room to the same position."""
         await self._async_all("async_set_cover_position", **kwargs)
+
+    async def async_send_command(self, command: str) -> None:
+        """Send a raw action to the whole room as one room command."""
+        if not (active := self._active):
+            return
+        await active[0].blind.async_send(command, code=self._code)

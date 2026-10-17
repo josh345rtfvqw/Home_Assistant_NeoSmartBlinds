@@ -225,5 +225,17 @@
     "abort": {
       "no_rooms": "No room covers yet. Give two or more blinds the same room code (in each blind's settings) and a room cover is created for them."
     }
+  },
+  "services": {
+    "send_command": {
+      "name": "Send command",
+      "description": "Sends a raw Neo action to a blind, or to a whole room through its room cover. Home Assistant's position estimate isn't changed, so use it for commands the blind cover doesn't offer.",
+      "fields": {
+        "command": {
+          "name": "Command",
+          "description": "Two letters or digits from the Neo protocol, for example mu or md (micro-step), i1 or i2 (intermediate positions on NEO motors), u4 or d4 (middle rail on extended top-down/bottom-up blinds), or 01-99 (go to a position on motors that support it). The blind's motor code is added automatically."
+        }
+      }
+    }
   }
 }
