@@ -415,3 +415,48 @@ async def test_different_entity_area_is_kept(
     await hass.async_block_till_done()
 
     assert ent_reg.async_get(COVER).area_id == porch.id
+
+
+async def test_migration_disables_existing_favourite_buttons(
+    hass: HomeAssistant, fake_controller: FakeController
+) -> None:
+    """Entries from before 1.2 get their enabled favourite buttons disabled once."""
+    subentry = blind_subentry(motor_code="no")
+    entry = controller_entry(fake_controller, [subentry], minor_version=1)
+    entry.add_to_hass(hass)
+    sub_id = next(iter(entry.subentries))
+    uid = blind_unique_id(dict(subentry["data"]))
+    ent_reg = er.async_get(hass)
+    # Buttons as 3.1.0 left them: favourite 1 enabled, favourite 2 hidden by the user
+    one = ent_reg.async_get_or_create(
+        BUTTON_DOMAIN,
+        DOMAIN,
+        f"{uid}.favourite_1",
+        config_entry=entry,
+        config_subentry_id=sub_id,
+    )
+    two = ent_reg.async_get_or_create(
+        BUTTON_DOMAIN,
+        DOMAIN,
+        f"{uid}.favourite_2",
+        config_entry=entry,
+        config_subentry_id=sub_id,
+        disabled_by=er.RegistryEntryDisabler.USER,
+    )
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert entry.minor_version == 2
+    assert (
+        ent_reg.async_get(one.entity_id).disabled_by
+        is er.RegistryEntryDisabler.INTEGRATION
+    )
+    assert ent_reg.async_get(two.entity_id).disabled_by is er.RegistryEntryDisabler.USER
+    assert hass.states.get(COVER) is not None
+
+    # Enabling a button afterwards sticks: the migration doesn't run again
+    ent_reg.async_update_entity(one.entity_id, disabled_by=None)
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert ent_reg.async_get(one.entity_id).disabled_by is None

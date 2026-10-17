@@ -142,6 +142,7 @@ def controller_entry(
     controller: FakeController,
     subentries: list[ConfigSubentryData],
     protocol: str = "http",
+    minor_version: int = 2,
 ) -> MockConfigEntry:
     """Build a controller config entry pointing at the fake controller."""
     return MockConfigEntry(
@@ -157,6 +158,7 @@ def controller_entry(
             CONF_HUB_ID: HUB_ID,
         },
         subentries_data=subentries,
+        minor_version=minor_version,
     )
 
 

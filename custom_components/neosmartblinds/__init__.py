@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import NeoClient
 from .blind import NeoBlind
 from .const import CONF_HUB_ID, CONF_PARENT, CONF_PROTOCOL, DOMAIN, SUBENTRY_BLIND
+
+_LOGGER = logging.getLogger(__name__)
 from .group import NeoGroup
 
 PLATFORMS: list[Platform] = [Platform.BUTTON, Platform.COVER]
@@ -66,6 +70,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: NeoConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+    return True
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: NeoConfigEntry) -> bool:
+    """Migrate an old config entry."""
+    if entry.version > 1:
+        # Downgraded from a future version
+        return False
+    if entry.minor_version < 2:
+        # 1.2: favourite buttons are disabled by default, because the controller
+        # can't report whether a favourite is saved. Disable the existing ones
+        # too; the user enables them once they've set a favourite.
+        ent_reg = er.async_get(hass)
+        for entity in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
+            if (
+                entity.domain == Platform.BUTTON
+                and ".favourite_" in entity.unique_id
+                and entity.disabled_by is None
+            ):
+                ent_reg.async_update_entity(
+                    entity.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION
+                )
+        hass.config_entries.async_update_entry(entry, minor_version=2)
+        _LOGGER.debug("Migrated %s to version 1.2", entry.title)
     return True
 
 

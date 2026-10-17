@@ -111,6 +111,7 @@ class NeoSmartBlindsConfigFlow(ConfigFlow, domain=DOMAIN):
     """Set up a Neo Smart Blinds controller."""
 
     VERSION = 1
+    MINOR_VERSION = 2
 
     @classmethod
     @callback
