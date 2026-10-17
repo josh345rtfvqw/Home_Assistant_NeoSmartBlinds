@@ -13,7 +13,7 @@ For each blind:
 
 Each blind is its own device, linked to a device for the controller.
 
-For each **room code** shared by two or more blinds, there is also a **room cover**. Name rooms from the controller's **Configure** button (Settings → Devices & services → Neo Smart Blinds → ⚙ on the controller); unnamed rooms are called *Room* plus the code. See [Room commands](#room-commands).
+For each **room code** shared by two or more blinds, there is also a **room cover**. Name rooms from the controller's **Configure** button (Settings → Devices & services → Neo Smart Blinds → ⚙ on the controller); unnamed rooms are called *Room* plus the code. The room is the device and its cover is called *<room> Blinds*, for example *Frontyard Blinds*. See [Room commands](#room-commands).
 
 The controller device has a **Connection** sensor (under Diagnostics). It's on while the controller answers: it updates with every command, and Home Assistant also checks every 5 minutes that the controller accepts a connection, without sending a command.
 

@@ -537,7 +537,8 @@ class NeoRoomCover(CoverEntity):
     """
 
     _attr_has_entity_name = True
-    _attr_name = None
+    # The device is the room ("Frontyard"); the cover is "Frontyard Blinds"
+    _attr_translation_key = "room"
     _attr_device_class = CoverDeviceClass.BLIND
     _attr_assumed_state = True
     _attr_should_poll = False

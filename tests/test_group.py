@@ -144,7 +144,7 @@ async def test_room_failure_reaches_every_blind(
         assert hass.states.get(entity).state == "open"
 
 
-ROOM_COVER = "cover.room_021_230_15"
+ROOM_COVER = "cover.room_021_230_15_blinds"
 
 
 async def test_room_cover_sends_one_command(
@@ -203,7 +203,7 @@ async def test_no_room_cover_without_shared_code(
         ),
     )
     assert hass.states.get(ROOM_COVER) is None
-    assert hass.states.get("cover.room_021_231_15") is None
+    assert hass.states.get("cover.room_021_231_15_blinds") is None
     assert hass.states.get("cover.other_room") is not None
 
 

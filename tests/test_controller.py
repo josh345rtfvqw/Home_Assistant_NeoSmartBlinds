@@ -57,7 +57,7 @@ async def test_name_rooms(hass: HomeAssistant, fake_controller: FakeController) 
     """Rooms are named from the controller's options."""
     entry = controller_entry(fake_controller, _room_blinds())
     await setup_entry(hass, entry)
-    assert hass.states.get("cover.room_021_230_15") is not None
+    assert hass.states.get("cover.room_021_230_15_blinds") is not None
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert result["type"] is FlowResultType.FORM
@@ -70,6 +70,10 @@ async def test_name_rooms(hass: HomeAssistant, fake_controller: FakeController) 
     await hass.async_block_till_done()
 
     assert _room_device(hass).name == "Lounge"
+    entity_id = er.async_get(hass).async_get_entity_id(
+        COVER_DOMAIN, DOMAIN, f"{DOMAIN}.{ROOM}.room"
+    )
+    assert hass.states.get(entity_id).name == "Lounge Blinds"
 
     # Clearing the name goes back to the default
     result = await hass.config_entries.options.async_init(entry.entry_id)
@@ -177,7 +181,7 @@ async def test_send_command_to_room(
     await hass.services.async_call(
         DOMAIN,
         SERVICE_SEND_COMMAND,
-        {ATTR_ENTITY_ID: "cover.room_021_230_15", ATTR_COMMAND: "i1"},
+        {ATTR_ENTITY_ID: "cover.room_021_230_15_blinds", ATTR_COMMAND: "i1"},
         blocking=True,
     )
     assert fake_controller.received == [f"{ROOM}-i1!bf"]

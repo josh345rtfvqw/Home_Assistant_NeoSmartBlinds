@@ -233,6 +233,11 @@
       "connection": {
         "name": "Connection"
       }
+    },
+    "cover": {
+      "room": {
+        "name": "Blinds"
+      }
     }
   },
   "exceptions": {
