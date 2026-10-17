@@ -194,6 +194,11 @@
       "favourite_2": {
         "name": "Favourite position 2"
       }
+    },
+    "binary_sensor": {
+      "connection": {
+        "name": "Connection"
+      }
     }
   },
   "exceptions": {
@@ -208,6 +213,17 @@
     "yaml_import_failed": {
       "title": "NeoSmartBlinds YAML blind could not be imported",
       "description": "The blind {name} in configuration.yaml could not be imported ({reason}). Fix it in YAML and restart, or add it from the UI, then remove the YAML entry."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Room names",
+        "description": "Each room code shared by two or more blinds gets a room cover that moves them all together. Give each room a name (leave empty for \"Room\" and the code).\n\n{rooms}"
+      }
+    },
+    "abort": {
+      "no_rooms": "No room covers yet. Give two or more blinds the same room code (in each blind's settings) and a room cover is created for them."
     }
   }
 }

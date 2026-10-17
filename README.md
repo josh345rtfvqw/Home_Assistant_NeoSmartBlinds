@@ -13,7 +13,9 @@ For each blind:
 
 Each blind is its own device, linked to a device for the controller.
 
-For each **room code** shared by two or more blinds, there is also a **room cover** (device *Room 021.230-15*, which you can rename). See [Room commands](#room-commands).
+For each **room code** shared by two or more blinds, there is also a **room cover**. Name rooms from the controller's **Configure** button (Settings → Devices & services → NeoSmartBlinds → ⚙ on the controller); unnamed rooms are called *Room* plus the code. See [Room commands](#room-commands).
+
+The controller device has a **Connection** sensor (under Diagnostics). It's on while the controller answers: it updates with every command, and Home Assistant also checks every 5 minutes that the controller accepts a connection, without sending a command.
 
 The controller never reports where a blind is, so the position is always an estimate based on how long the blind takes to close. The cover is marked as an assumed state, so Home Assistant shows open and close buttons instead of a toggle.
 
@@ -164,3 +166,7 @@ python3.13 -m venv .venv
 ```
 
 The tests run a fake controller on localhost that speaks both HTTP and TCP.
+
+## Reporting a problem
+
+Open an [issue](https://github.com/josh345rtfvqw/Home_Assistant_NeoSmartBlinds/issues) and attach the diagnostics: Settings → Devices & services → NeoSmartBlinds → ⋮ on the controller → **Download diagnostics**. They include your blind settings, the connection status and the last 20 commands with their results; the controller's address and ID are removed.

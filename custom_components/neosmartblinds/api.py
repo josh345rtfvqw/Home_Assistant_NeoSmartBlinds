@@ -5,7 +5,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections import deque
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 import aiohttp
 
@@ -46,6 +49,15 @@ class BlindCommand:
         return command
 
 
+@dataclass(frozen=True, slots=True)
+class CommandRecord:
+    """One exchange with the controller, kept for diagnostics."""
+
+    time: datetime
+    command: str  # the command, or "connection check"
+    result: str  # "ok" or the error
+
+
 class NeoClient:
     """Send commands to one controller, one at a time with spacing between them."""
 
@@ -68,22 +80,64 @@ class NeoClient:
         self._lock = asyncio.Lock()
         self._last_sent = 0.0
         self._last_hash = 0
+        # Whether the controller answered the last exchange (None: not tried yet)
+        self.connected: bool | None = None
+        self.last_error: str | None = None
+        self.history: deque[CommandRecord] = deque(maxlen=20)
+        self._listeners: list[Callable[[], None]] = []
 
-    async def async_send(self, command: BlindCommand) -> None:
-        """Send a command, waiting for the controller to be free first."""
+    def add_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
+        """Call listener when the connection status changes."""
+        self._listeners.append(listener)
+        return lambda: self._listeners.remove(listener)
+
+    def _record(self, what: str, err: Exception | None) -> None:
+        self.history.append(
+            CommandRecord(datetime.now(UTC), what, "ok" if err is None else repr(err))
+        )
+        # Any answer, even a rejected command, means the controller is reachable
+        connected = not isinstance(err, NeoConnectionError)
+        if err is not None:
+            self.last_error = repr(err)
+        if connected != self.connected:
+            self.connected = connected
+            for listener in list(self._listeners):
+                listener()
+
+    async def _async_exchange(
+        self, what: str, send: Callable[[], Awaitable[None]]
+    ) -> None:
+        """Run one exchange when the controller is free, and record the result."""
         async with self._lock:
             loop = asyncio.get_running_loop()
             wait = self._last_sent + self._spacing - loop.time()
             if wait > 0:
-                _LOGGER.debug("%s, delaying command for %.3fs", command.code, wait)
+                _LOGGER.debug("%s, delaying for %.3fs", what, wait)
                 await asyncio.sleep(wait)
             try:
-                if self.protocol == PROTOCOL_TCP:
-                    await self._async_send_tcp(command)
-                else:
-                    await self._async_send_http(command)
+                await send()
+            except NeoError as err:
+                self._record(what, err)
+                raise
+            else:
+                self._record(what, None)
             finally:
                 self._last_sent = loop.time()
+
+    async def async_send(self, command: BlindCommand) -> None:
+        """Send a command, waiting for the controller to be free first."""
+        if self.protocol == PROTOCOL_TCP:
+            await self._async_exchange(
+                str(command), lambda: self._async_send_tcp(command)
+            )
+        else:
+            await self._async_exchange(
+                str(command), lambda: self._async_send_http(command)
+            )
+
+    async def async_probe(self) -> None:
+        """Check the controller is reachable, queued like a command."""
+        await self._async_exchange("connection check", self.async_check_connection)
 
     async def async_check_connection(self) -> None:
         """Open and close a connection to the controller without sending a command."""

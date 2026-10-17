@@ -15,6 +15,7 @@ from homeassistant.config_entries import (
     ConfigSubentry,
     ConfigSubentryData,
     ConfigSubentryFlow,
+    OptionsFlow,
     SubentryFlowResult,
 )
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
@@ -33,7 +34,7 @@ from homeassistant.helpers.selector import (
 )
 
 from .api import NeoClient, NeoConnectionError
-from .blind import blind_unique_id
+from .blind import blind_unique_id, shared_rooms
 from .const import (
     BLIND_CODE_RE,
     CONF_BLIND_CODE,
@@ -45,6 +46,7 @@ from .const import (
     CONF_PERCENT_SUPPORT,
     CONF_PROTOCOL,
     CONF_RAIL,
+    CONF_ROOM_NAMES,
     CONF_START_POSITION,
     CONF_STARTUP_SYNC,
     CONF_TDBU_EXTENDED,
@@ -125,6 +127,12 @@ class NeoSmartBlindsConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> dict[str, type[ConfigSubentryFlow]]:
         """Blinds are added as subentries of the controller."""
         return {SUBENTRY_BLIND: BlindSubentryFlow}
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        """Name the rooms."""
+        return RoomNamesOptionsFlow()
 
     async def _async_validate(self, data: dict[str, Any]) -> dict[str, str]:
         errors: dict[str, str] = {}
@@ -447,6 +455,44 @@ def _form_values(subentry: ConfigSubentry) -> dict[str, Any]:
     if not values.get(CONF_MOTOR_CODE):
         values.pop(CONF_MOTOR_CODE, None)
     return values
+
+
+class RoomNamesOptionsFlow(OptionsFlow):
+    """Name the room covers made for shared room codes."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Show a name field for each room."""
+        rooms = shared_rooms(self.config_entry.subentries.values())
+        if not rooms:
+            return self.async_abort(reason="no_rooms")
+        if user_input is not None:
+            names = {
+                code: name
+                for code in rooms
+                if (name := str(user_input.get(code) or "").strip())
+            }
+            return self.async_create_entry(data={CONF_ROOM_NAMES: names})
+
+        current: dict[str, str] = self.config_entry.options.get(CONF_ROOM_NAMES, {})
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    code, description={"suggested_value": current.get(code)}
+                ): TextSelector()
+                for code in rooms
+            }
+        )
+        return self.async_show_form(
+            step_id="init",
+            data_schema=schema,
+            description_placeholders={
+                "rooms": "\n".join(
+                    f"- {code}: {', '.join(names)}" for code, names in rooms.items()
+                )
+            },
+        )
 
 
 class BlindSubentryFlow(ConfigSubentryFlow):

@@ -24,6 +24,9 @@ CONF_OPEN_TIME: Final = "open_time"
 CONF_STARTUP_SYNC: Final = "startup_sync"
 CONF_PARENT: Final = "parent_group"
 
+# Controller entry options
+CONF_ROOM_NAMES: Final = "room_names"  # room code -> name
+
 SUBENTRY_BLIND: Final = "blind"
 
 PROTOCOL_HTTP: Final = "http"

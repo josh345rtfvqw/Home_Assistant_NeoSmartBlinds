@@ -19,7 +19,7 @@ from .group import NeoGroup
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.BUTTON, Platform.COVER]
+PLATFORMS: list[Platform] = [Platform.BINARY_SENSOR, Platform.BUTTON, Platform.COVER]
 
 
 @dataclass

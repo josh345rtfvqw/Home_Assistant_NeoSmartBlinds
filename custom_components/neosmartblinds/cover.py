@@ -52,7 +52,7 @@ from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.util import dt as dt_util
 
 from . import NeoConfigEntry, controller_identifier
-from .blind import NeoBlind
+from .blind import NeoBlind, shared_rooms
 from .const import (
     CONF_BLIND_CODE,
     CONF_CLOSE_TIME,
@@ -62,6 +62,7 @@ from .const import (
     CONF_PERCENT_SUPPORT,
     CONF_PROTOCOL,
     CONF_RAIL,
+    CONF_ROOM_NAMES,
     CONF_START_POSITION,
     DOMAIN,
     EXPLICIT_POSITIONING,
@@ -159,14 +160,16 @@ async def async_setup_entry(
         covers.append(cover)
         async_add_entities([cover], config_subentry_id=subentry_id)
 
-    blind_codes = {blind.code for blind in runtime.blinds.values()}
+    names: dict[str, str] = entry.options.get(CONF_ROOM_NAMES, {})
     rooms = [
-        NeoRoomCover(entry, group, members)
-        for code, group in runtime.groups.items()
-        if (members := [c for c in covers if c.blind.group is group])
-        and len(members) >= 2
-        # A room code added as a blind of its own already has a cover
-        and code not in blind_codes
+        NeoRoomCover(
+            entry,
+            group,
+            [c for c in covers if c.blind.group is group],
+            names.get(code),
+        )
+        for code in shared_rooms(entry.subentries.values())
+        if (group := runtime.groups.get(code)) is not None
     ]
     if rooms:
         async_add_entities(rooms)
@@ -521,13 +524,14 @@ class NeoRoomCover(CoverEntity):
         entry: NeoConfigEntry,
         group: NeoGroup,
         members: list[NeoSmartBlindsCover],
+        name: str | None,
     ) -> None:
         """Initialise the room cover."""
         self._members = members
         self._attr_unique_id = f"{DOMAIN}.{group.code}.room"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._attr_unique_id)},
-            name=f"Room {group.code}",
+            name=name or f"Room {group.code}",
             manufacturer="Neo Smart Blinds",
             model="Room (all blinds with this room code)",
             serial_number=group.code,

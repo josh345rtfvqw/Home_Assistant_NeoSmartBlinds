@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -49,6 +49,7 @@ from .const import (
     RAIL_BOTH,
     RAIL_BOTTOM,
     RAIL_TOP,
+    SUBENTRY_BLIND,
     SYNC_NONE,
 )
 from .group import NeoGroup
@@ -86,6 +87,21 @@ def rail_commands(rail: int, tdbu_extended: bool) -> RailCommands:
     if rail == RAIL_BOTH:
         return RailCommands(CMD_UP3, CMD_DOWN3, CMD_STOP, None, None)
     return RailCommands(CMD_UP, CMD_DOWN, CMD_STOP, CMD_MICRO_UP, CMD_MICRO_DOWN)
+
+
+def shared_rooms(subentries: Iterable[ConfigSubentry]) -> dict[str, list[str]]:
+    """Return room code -> blind names, for room codes shared by two or more blinds.
+
+    A room code that is itself added as a blind already has its own cover, so it
+    gets no room cover.
+    """
+    blinds = [s for s in subentries if s.subentry_type == SUBENTRY_BLIND]
+    codes = {s.data[CONF_BLIND_CODE] for s in blinds}
+    rooms: dict[str, list[str]] = {}
+    for sub in blinds:
+        if (parent := sub.data.get(CONF_PARENT)) and parent not in codes:
+            rooms.setdefault(parent, []).append(sub.title)
+    return {code: names for code, names in sorted(rooms.items()) if len(names) >= 2}
 
 
 def blind_unique_id(data: dict[str, Any]) -> str:
