@@ -2,34 +2,48 @@
   "config": {
     "step": {
       "user": {
-        "title": "Neo Smart Blinds controller",
-        "description": "Add a Neo Smart Blinds controller. Blinds are added afterwards, from the controller's entry.",
+        "title": "Add a Neo Smart Blinds controller",
+        "description": "Blinds are added after this, from the controller's entry: choose Add blind.",
         "data": {
           "host": "Host",
-          "protocol": "Protocol",
+          "protocol": "Protocol"
+        },
+        "data_description": {
+          "host": "The controller's IP address. In the Neo app open the menu, choose Your Controllers, and read the IP line under the controller. Give it a fixed address in your router so it doesn't change.",
+          "protocol": "HTTP is recommended: the controller reports a wrong controller ID or a bad command. TCP only echoes the command back."
+        }
+      },
+      "connection": {
+        "title": "Connect over {protocol}",
+        "data": {
           "port": "Port",
           "hub_id": "Controller ID"
         },
         "data_description": {
-          "host": "IP address of the controller, from Your Controllers in the Neo app. Give it a fixed address in your router.",
-          "protocol": "HTTP reports errors such as a wrong controller ID; TCP only echoes the command back.",
-          "port": "Leave empty for the default: 8838 for HTTP, 8839 for TCP.",
-          "hub_id": "The 24 character ID shown under the controller in the Neo app. Required for HTTP."
+          "port": "Filled in with the default for {protocol}. Only change it if your controller uses a different port.",
+          "hub_id": "In the Neo app open the menu, choose Your Controllers, and copy the long ID (about 24 characters) under the controller's name. Required for HTTP, not used by TCP."
         }
       },
       "reconfigure": {
         "title": "Change controller settings",
         "data": {
           "host": "Host",
-          "protocol": "Protocol",
+          "protocol": "Protocol"
+        },
+        "data_description": {
+          "host": "The controller's IP address. In the Neo app open the menu, choose Your Controllers, and read the IP line under the controller. Give it a fixed address in your router so it doesn't change.",
+          "protocol": "HTTP is recommended: the controller reports a wrong controller ID or a bad command. TCP only echoes the command back."
+        }
+      },
+      "reconfigure_connection": {
+        "title": "Connect over {protocol}",
+        "data": {
           "port": "Port",
           "hub_id": "Controller ID"
         },
         "data_description": {
-          "host": "IP address of the controller, from Your Controllers in the Neo app. Give it a fixed address in your router.",
-          "protocol": "HTTP reports errors such as a wrong controller ID; TCP only echoes the command back.",
-          "port": "Leave empty for the default: 8838 for HTTP, 8839 for TCP.",
-          "hub_id": "The 24 character ID shown under the controller in the Neo app. Required for HTTP."
+          "port": "Filled in with the default for {protocol}. Only change it if your controller uses a different port.",
+          "hub_id": "In the Neo app open the menu, choose Your Controllers, and copy the long ID (about 24 characters) under the controller's name. Required for HTTP, not used by TCP."
         }
       },
       "reauth_confirm": {
@@ -37,6 +51,9 @@
         "description": "The controller at {host} rejected the controller ID. Enter the ID shown under the controller in the Neo app.",
         "data": {
           "hub_id": "Controller ID"
+        },
+        "data_description": {
+          "hub_id": "In the Neo app open the menu, choose Your Controllers, and copy the long ID (about 24 characters) under the controller's name. Required for HTTP, not used by TCP."
         }
       }
     },
@@ -78,15 +95,15 @@
             "parent_group": "Room code (parent group)"
           },
           "data_description": {
-            "name": "Name shown in Home Assistant.",
-            "blind_code": "From the blind's advanced page in the Neo app, for example 021.230-04. Use the room code (channel 15) to control a whole room as one cover.",
-            "motor_code": "Shown under the blind code in the Neo app. Required by some controllers (for example C-BR300).",
-            "rail": "For top-down/bottom-up blinds; ordinary blinds use the top rail.",
-            "tdbu_extended": "Only for top-down/bottom-up blinds with mb, ra, ap or db motors. Uses the u4/d4/x2 command set.",
-            "percent_support": "The controller never reports position, so it is always estimated from the close time.",
-            "close_time": "Seconds the blind takes to go from fully open to fully closed. Time it with a stopwatch.",
-            "start_position": "Position to assume when Home Assistant starts (positioning modes 1 and 2). Leave empty to restore the last known position.",
-            "parent_group": "Room code (ending in -15) shared by the blinds in this room. When every blind in the room gets the same command within 250 ms, one room command is sent instead."
+            "name": "How the blind is named in Home Assistant, for example Kitchen left.",
+            "blind_code": "In the Neo app open the blind, tap the settings (advanced) page and read Blind Code, for example 021.230-04. To control a whole room as one cover, use the Room Code (it ends in -15) instead.",
+            "motor_code": "Shown as Motor code under the Blind Code on the same page of the Neo app. Pick it from the list, or type it if it's missing. Some controllers (such as the C-BR300) need it.",
+            "rail": "For top-down/bottom-up blinds (the Neo app shows Top-D/Bottom-U: YES). Ordinary blinds use the top rail.",
+            "tdbu_extended": "Only for top-down/bottom-up blinds whose motor code is mb, ra, ap or db. Leave off for tb motors and ordinary blinds.",
+            "percent_support": "The controller never reports where a blind is, so Home Assistant estimates it from the close time. Choose mode 1 only if the % position switch works for this blind in the Neo app.",
+            "close_time": "Seconds the blind takes to go from fully open to fully closed. Not shown in the Neo app: time it with a stopwatch.",
+            "start_position": "Optional. The position (0 closed, 100 open) to assume when Home Assistant starts, in modes 1 and 2. Leave empty to restore the last known position.",
+            "parent_group": "Optional. The Room Code from the blind's settings page in the Neo app (ends in -15). When every blind with the same room code gets the same command within 250 ms, one room command is sent instead."
           }
         },
         "reconfigure": {
@@ -103,15 +120,15 @@
             "parent_group": "Room code (parent group)"
           },
           "data_description": {
-            "name": "Name shown in Home Assistant.",
-            "blind_code": "From the blind's advanced page in the Neo app, for example 021.230-04. Use the room code (channel 15) to control a whole room as one cover.",
-            "motor_code": "Shown under the blind code in the Neo app. Required by some controllers (for example C-BR300).",
-            "rail": "For top-down/bottom-up blinds; ordinary blinds use the top rail.",
-            "tdbu_extended": "Only for top-down/bottom-up blinds with mb, ra, ap or db motors. Uses the u4/d4/x2 command set.",
-            "percent_support": "The controller never reports position, so it is always estimated from the close time.",
-            "close_time": "Seconds the blind takes to go from fully open to fully closed. Time it with a stopwatch.",
-            "start_position": "Position to assume when Home Assistant starts (positioning modes 1 and 2). Leave empty to restore the last known position.",
-            "parent_group": "Room code (ending in -15) shared by the blinds in this room. When every blind in the room gets the same command within 250 ms, one room command is sent instead."
+            "name": "How the blind is named in Home Assistant, for example Kitchen left.",
+            "blind_code": "In the Neo app open the blind, tap the settings (advanced) page and read Blind Code, for example 021.230-04. To control a whole room as one cover, use the Room Code (it ends in -15) instead.",
+            "motor_code": "Shown as Motor code under the Blind Code on the same page of the Neo app. Pick it from the list, or type it if it's missing. Some controllers (such as the C-BR300) need it.",
+            "rail": "For top-down/bottom-up blinds (the Neo app shows Top-D/Bottom-U: YES). Ordinary blinds use the top rail.",
+            "tdbu_extended": "Only for top-down/bottom-up blinds whose motor code is mb, ra, ap or db. Leave off for tb motors and ordinary blinds.",
+            "percent_support": "The controller never reports where a blind is, so Home Assistant estimates it from the close time. Choose mode 1 only if the % position switch works for this blind in the Neo app.",
+            "close_time": "Seconds the blind takes to go from fully open to fully closed. Not shown in the Neo app: time it with a stopwatch.",
+            "start_position": "Optional. The position (0 closed, 100 open) to assume when Home Assistant starts, in modes 1 and 2. Leave empty to restore the last known position.",
+            "parent_group": "Optional. The Room Code from the blind's settings page in the Neo app (ends in -15). When every blind with the same room code gets the same command within 250 ms, one room command is sent instead."
           }
         }
       },

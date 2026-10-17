@@ -29,14 +29,21 @@ Requires Home Assistant 2025.8 or newer.
 
 ### 1. Add the controller
 
-**Settings → Devices & services → Add integration → NeoSmartBlinds.**
+**Settings → Devices & services → Add integration → NeoSmartBlinds.** No YAML is needed.
+
+The first form asks for:
 
 | Field | |
 |---|---|
 | Host | The controller's IP address, from **Your Controllers** in the Neo app. |
 | Protocol | `HTTP` (port 8838) or `TCP` (port 8839). HTTP is recommended: the controller reports a wrong controller ID or a bad command. TCP only echoes the command back. |
-| Port | Leave empty for the protocol's default. |
-| Controller ID | The 24 character ID under the controller in the Neo app. Required for HTTP. |
+
+The second form has the port already filled in for the protocol you chose, plus:
+
+| Field | |
+|---|---|
+| Port | Change it only if your controller uses a different port. |
+| Controller ID | The 24 character ID under the controller in **Your Controllers** in the Neo app. Required for HTTP, not used by TCP. |
 
 Home Assistant checks that it can open a connection to the controller. It does not send a command, so it cannot check the controller ID at this point. If the ID is wrong, the first command fails and Home Assistant asks you to re-enter it.
 
@@ -51,7 +58,7 @@ On the controller's entry, choose **Add blind**.
 |---|---|
 | Name | Name shown in Home Assistant. |
 | Blind code | From the blind's advanced page in the Neo app, in the form `ID1.ID2-CHANNEL`, for example `021.230-04`. Use the room code (channel `15`) to control a whole room as one cover. |
-| Motor code | Shown under the blind code in the Neo app, for example `bf`. Some controllers (such as the C-BR300) need it. |
+| Motor code | Shown under the blind code in the Neo app, for example `bf`. Pick it from the list (each code is shown with its motor name, such as `bf – Bofu (standard)`), or type it. Some controllers (such as the C-BR300) need it. |
 | Rail | For top-down/bottom-up blinds: top/middle rail, bottom/lower rail, or both. Ordinary blinds use the top rail. |
 | Extended top-down/bottom-up commands | Only for top-down/bottom-up blinds with `mb`, `ra`, `ap` or `db` motors. These use the newer `u4`/`d4`/`x2` command set; `tb` motors use the standard set. |
 | Positioning mode | See below. |
@@ -61,7 +68,7 @@ On the controller's entry, choose **Add blind**.
 
 ![Blind Code](doc_images/app_blind_codes.jpg)
 
-To change a blind or the controller later, use **Reconfigure** on it. A blind keeps its entity when you change its settings.
+To change a blind or the controller later, use **Reconfigure** on it. A blind keeps its entity when you change its settings. To remove a blind, open its menu (⋮) on the controller's entry and choose **Delete**.
 
 ### Positioning modes
 
@@ -101,7 +108,7 @@ If a YAML entry can't be imported (for example, a blind code in the wrong format
 ### What changed
 
 - **The tilt slider no longer selects favourites.** Use the **Favourite position 1/2** buttons, or in mode 0 set the position to 50 or 51 as before. Tilt open/close still send micro-steps.
-- `protocol` is no longer case-sensitive, and the port defaults to 8838 for HTTP and 8839 for TCP.
+- Everything is set up from the UI. `protocol` is no longer case-sensitive, and the port is filled in for the protocol (8838 for HTTP, 8839 for TCP).
 - `rail` accepts `3` (both rails), and there is an option for the extended top-down/bottom-up command set (`u4`/`d4`/`x2`).
 - Errors from the controller are shown when a command fails, instead of only being logged. A rejected controller ID starts a re-authentication flow.
 - In mode 0, Home Assistant restores the last position at startup instead of always starting at 50.

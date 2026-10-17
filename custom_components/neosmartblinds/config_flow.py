@@ -67,7 +67,7 @@ _LOGGER = logging.getLogger(__name__)
 MOTOR_CODE_RE = re.compile(r"^[a-z0-9]{2}$")
 
 
-def _controller_schema() -> vol.Schema:
+def _address_schema() -> vol.Schema:
     return vol.Schema(
         {
             vol.Required(CONF_HOST): TextSelector(),
@@ -78,10 +78,19 @@ def _controller_schema() -> vol.Schema:
                     mode=SelectSelectorMode.LIST,
                 )
             ),
-            vol.Optional(CONF_PORT): NumberSelector(
+        }
+    )
+
+
+def _connection_schema(protocol: str) -> vol.Schema:
+    """Port (defaulting to the protocol's port) and controller id."""
+    hub_id = vol.Required if protocol == PROTOCOL_HTTP else vol.Optional
+    return vol.Schema(
+        {
+            vol.Required(CONF_PORT, default=DEFAULT_PORTS[protocol]): NumberSelector(
                 NumberSelectorConfig(min=1, max=65535, mode=NumberSelectorMode.BOX)
             ),
-            vol.Optional(CONF_HUB_ID): TextSelector(),
+            hub_id(CONF_HUB_ID): TextSelector(),
         }
     )
 
@@ -131,44 +140,84 @@ class NeoSmartBlindsConfigFlow(ConfigFlow, domain=DOMAIN):
             errors["base"] = "unknown"
         return errors
 
+    _address: dict[str, Any]
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Ask for the controller's address and id."""
-        errors: dict[str, str] = {}
+        """Ask for the controller's address and protocol."""
         if user_input is not None:
-            data = _normalise_controller(user_input)
+            self._address = {
+                CONF_HOST: str(user_input[CONF_HOST]).strip(),
+                CONF_PROTOCOL: user_input[CONF_PROTOCOL],
+            }
+            self._async_abort_entries_match({CONF_HOST: self._address[CONF_HOST]})
+            return await self.async_step_connection()
+        return self.async_show_form(step_id="user", data_schema=_address_schema())
+
+    async def async_step_connection(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Ask for the port, prefilled for the protocol, and the controller id."""
+        errors: dict[str, str] = {}
+        protocol = self._address[CONF_PROTOCOL]
+        if user_input is not None:
+            data = _normalise_controller(self._address | user_input)
             await self.async_set_unique_id(data[CONF_HUB_ID] or data[CONF_HOST])
             self._abort_if_unique_id_configured()
-            self._async_abort_entries_match({CONF_HOST: data[CONF_HOST]})
             if not (errors := await self._async_validate(data)):
                 return self.async_create_entry(
                     title=f"Neo controller ({data[CONF_HOST]})", data=data
                 )
         return self.async_show_form(
-            step_id="user",
+            step_id="connection",
             data_schema=self.add_suggested_values_to_schema(
-                _controller_schema(), user_input
+                _connection_schema(protocol), user_input
             ),
             errors=errors,
+            description_placeholders={CONF_PROTOCOL: protocol.upper()},
         )
 
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Change the controller's address, protocol, port or id."""
+        """Change the controller's address or protocol."""
         entry = self._get_reconfigure_entry()
-        errors: dict[str, str] = {}
         if user_input is not None:
-            data = _normalise_controller(user_input)
-            if not (errors := await self._async_validate(data)):
-                return self.async_update_and_abort(entry, data=data)
+            self._address = {
+                CONF_HOST: str(user_input[CONF_HOST]).strip(),
+                CONF_PROTOCOL: user_input[CONF_PROTOCOL],
+            }
+            return await self.async_step_reconfigure_connection()
         return self.async_show_form(
             step_id="reconfigure",
             data_schema=self.add_suggested_values_to_schema(
-                _controller_schema(), user_input or entry.data
+                _address_schema(), entry.data
+            ),
+        )
+
+    async def async_step_reconfigure_connection(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Change the port and controller id."""
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+        protocol = self._address[CONF_PROTOCOL]
+        if user_input is not None:
+            data = _normalise_controller(self._address | user_input)
+            if not (errors := await self._async_validate(data)):
+                return self.async_update_and_abort(entry, data=data)
+        current = dict(entry.data)
+        if current.get(CONF_PROTOCOL) != protocol:
+            # Protocol changed: offer the new protocol's port
+            current[CONF_PORT] = DEFAULT_PORTS[protocol]
+        return self.async_show_form(
+            step_id="reconfigure_connection",
+            data_schema=self.add_suggested_values_to_schema(
+                _connection_schema(protocol), user_input or current
             ),
             errors=errors,
+            description_placeholders={CONF_PROTOCOL: protocol.upper()},
         )
 
     async def async_step_reauth(
@@ -264,7 +313,7 @@ class NeoSmartBlindsConfigFlow(ConfigFlow, domain=DOMAIN):
 
 def _blind_schema() -> vol.Schema:
     motor_options = [
-        SelectOptionDict(value=code, label=f"{code} - {label}")
+        SelectOptionDict(value=code, label=f"{code} – {label}")
         for code, label in MOTOR_CODES.items()
     ]
     return vol.Schema(

@@ -36,39 +36,41 @@ from .conftest import (
 )
 
 
+def _port_default(result) -> int:
+    """Return the default shown in the port field."""
+    for key in result["data_schema"].schema:
+        if key == CONF_PORT:
+            return key.default()
+    raise AssertionError("no port field")
+
+
+def _suggested(result, field: str):
+    for key in result["data_schema"].schema:
+        if key == field:
+            return (key.description or {}).get("suggested_value")
+    raise AssertionError(f"no {field} field")
+
+
 async def test_user_flow(hass: HomeAssistant, fake_controller: FakeController) -> None:
-    """A controller is created after a connection check; port defaults by protocol."""
+    """Address and protocol first, then a port prefilled for the protocol."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": SOURCE_USER}
     )
-    assert result["type"] is FlowResultType.FORM
-
-    # HTTP needs the hub id
+    assert result["step_id"] == "user"
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        {CONF_HOST: "127.0.0.1", CONF_PROTOCOL: "http", CONF_PORT: 1},
+        result["flow_id"], {CONF_HOST: " 127.0.0.1 ", CONF_PROTOCOL: "http"}
     )
-    assert result["errors"] == {CONF_HUB_ID: "hub_id_required"}
+    assert result["step_id"] == "connection"
+    assert _port_default(result) == 8838
 
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        {
-            CONF_HOST: "127.0.0.1",
-            CONF_PROTOCOL: "http",
-            CONF_PORT: 1,
-            CONF_HUB_ID: HUB_ID,
-        },
+        result["flow_id"], {CONF_PORT: 1, CONF_HUB_ID: HUB_ID}
     )
     assert result["errors"] == {"base": "cannot_connect"}
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {
-            CONF_HOST: "127.0.0.1",
-            CONF_PROTOCOL: "http",
-            CONF_PORT: fake_controller.http_port,
-            CONF_HUB_ID: f" {HUB_ID} ",
-        },
+        {CONF_PORT: fake_controller.http_port, CONF_HUB_ID: f" {HUB_ID} "},
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"] == {
@@ -81,37 +83,30 @@ async def test_user_flow(hass: HomeAssistant, fake_controller: FakeController) -
     # Checking the connection must not move anything
     assert fake_controller.received == []
 
-    # Same controller again is rejected
+    # Same controller again is rejected at the first step
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": SOURCE_USER}
     )
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        {CONF_HOST: "127.0.0.1", CONF_PROTOCOL: "tcp", CONF_HUB_ID: HUB_ID},
+        result["flow_id"], {CONF_HOST: "127.0.0.1", CONF_PROTOCOL: "tcp"}
     )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
 
 
-async def test_user_flow_tcp_default_port(
+async def test_user_flow_tcp(
     hass: HomeAssistant, fake_controller: FakeController
 ) -> None:
-    """TCP without a port uses 8839 and doesn't need a hub id."""
+    """TCP prefills 8839 and doesn't need a controller id."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": SOURCE_USER}
     )
-    # Nothing listens on 8839 locally, so only check the stored defaults
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_HOST: "127.0.0.1", CONF_PROTOCOL: "tcp"}
     )
-    assert result["errors"] == {"base": "cannot_connect"}
+    assert _port_default(result) == 8839
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        {
-            CONF_HOST: "127.0.0.1",
-            CONF_PROTOCOL: "tcp",
-            CONF_PORT: fake_controller.tcp_port,
-        },
+        result["flow_id"], {CONF_PORT: fake_controller.tcp_port}
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_HUB_ID] == ""
@@ -121,19 +116,20 @@ async def test_user_flow_tcp_default_port(
 async def test_reconfigure(
     hass: HomeAssistant, fake_controller: FakeController
 ) -> None:
-    """The controller's settings can be changed."""
+    """The controller's settings can be changed; a new protocol offers its port."""
     entry = controller_entry(fake_controller, [blind_subentry()])
     await setup_entry(hass, entry)
     result = await entry.start_reconfigure_flow(hass)
-    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reconfigure"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_HOST: "127.0.0.1", CONF_PROTOCOL: "tcp"}
+    )
+    assert result["step_id"] == "reconfigure_connection"
+    assert _suggested(result, CONF_PORT) == 8839
+    assert _suggested(result, CONF_HUB_ID) == HUB_ID
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
-        {
-            CONF_HOST: "127.0.0.1",
-            CONF_PROTOCOL: "tcp",
-            CONF_PORT: fake_controller.tcp_port,
-            CONF_HUB_ID: HUB_ID,
-        },
+        {CONF_PORT: fake_controller.tcp_port, CONF_HUB_ID: HUB_ID},
     )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
@@ -342,3 +338,22 @@ async def test_yaml_import_invalid(hass: HomeAssistant) -> None:
     assert ir.async_get(hass).async_get_issue(
         DOMAIN, "yaml_import_failed_invalid_blind_code"
     )
+
+
+async def test_remove_blind(
+    hass: HomeAssistant, fake_controller: FakeController
+) -> None:
+    """Deleting a blind from the UI removes its entities."""
+    entry = controller_entry(
+        fake_controller, [blind_subentry(), blind_subentry("Blind Two", "021.230-05")]
+    )
+    await setup_entry(hass, entry)
+    sub_id = next(
+        s.subentry_id for s in entry.subentries.values() if s.title == "Blind Two"
+    )
+    assert hass.config_entries.async_remove_subentry(entry, sub_id)
+    await hass.async_block_till_done()
+    registry = er.async_get(hass)
+    assert registry.async_get("cover.blind_two") is None
+    assert hass.states.get("cover.blind_two") is None
+    assert hass.states.get("cover.blind_one").state == "open"
