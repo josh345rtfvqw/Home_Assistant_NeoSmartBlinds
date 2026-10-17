@@ -22,6 +22,7 @@ from homeassistant.components.cover import (
 from homeassistant.const import (
     ATTR_ENTITY_ID,
     ATTR_SUPPORTED_FEATURES,
+    EVENT_HOMEASSISTANT_STARTED,
     SERVICE_CLOSE_COVER,
     SERVICE_CLOSE_COVER_TILT,
     SERVICE_OPEN_COVER,
@@ -29,7 +30,7 @@ from homeassistant.const import (
     SERVICE_SET_COVER_POSITION,
     SERVICE_STOP_COVER,
 )
-from homeassistant.core import HomeAssistant, State
+from homeassistant.core import CoreState, HomeAssistant, State
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
@@ -210,7 +211,8 @@ async def test_favourite_only_mode(
         hass, controller_entry(fake_controller, [blind_subentry(percent_support=0)])
     )
     state = hass.states.get(COVER)
-    assert not state.attributes[ATTR_SUPPORTED_FEATURES] & CoverEntityFeature.SET_POSITION
+    features = state.attributes[ATTR_SUPPORTED_FEATURES]
+    assert not features & CoverEntityFeature.SET_POSITION
     assert ATTR_CURRENT_POSITION not in state.attributes
     await _call(hass, SERVICE_CLOSE_COVER)
     await hass.async_block_till_done()
@@ -322,15 +324,62 @@ async def test_restore_position(
     assert _position(hass) == 37
 
 
-async def test_start_position_wins(
+async def test_restored_position_beats_start_position(
     hass: HomeAssistant, fake_controller: FakeController
 ) -> None:
-    """start_position overrides the restored state."""
+    """start_position only applies before a position has been saved."""
     mock_restore_cache(hass, [State(COVER, "open", {ATTR_CURRENT_POSITION: 37})])
     await setup_entry(
-        hass, controller_entry(fake_controller, [blind_subentry(start_position=80)])
+        hass, controller_entry(fake_controller, [blind_subentry(start_position=50)])
     )
-    assert _position(hass) == 80
+    assert _position(hass) == 37
+
+
+async def test_open_time(
+    hass: HomeAssistant, fake_controller: FakeController, freezer: FrozenDateTimeFactory
+) -> None:
+    """Moving up uses the open time, moving down the close time."""
+    await setup_entry(
+        hass,
+        controller_entry(
+            fake_controller,
+            [blind_subentry(start_position=0, close_time=20, open_time=40)],
+        ),
+    )
+    await _call(hass, SERVICE_SET_COVER_POSITION, **{ATTR_POSITION: 50})
+    await _advance(hass, freezer, 10)  # a quarter of 40s
+    assert _position(hass) == 25
+    await _advance(hass, freezer, 10.5)
+    assert fake_controller.actions == ["021.230-04-up", "021.230-04-sp"]
+    assert _position(hass) == 50
+
+    fake_controller.clear()
+    await _call(hass, SERVICE_SET_COVER_POSITION, **{ATTR_POSITION: 25})
+    await _advance(hass, freezer, 5.5)  # a quarter of 20s
+    assert fake_controller.actions == ["021.230-04-dn", "021.230-04-sp"]
+    assert _position(hass) == 25
+
+
+@pytest.mark.parametrize(("sync", "action"), [("close", "dn"), ("open", "up")])
+async def test_startup_sync(
+    hass: HomeAssistant, fake_controller: FakeController, sync: str, action: str
+) -> None:
+    """The blind is driven to a known end once Home Assistant has started."""
+    mock_restore_cache(hass, [State(COVER, "open", {ATTR_CURRENT_POSITION: 37})])
+    hass.set_state(CoreState.not_running)
+    entry = controller_entry(fake_controller, [blind_subentry(startup_sync=sync)])
+    await setup_entry(hass, entry)
+    assert fake_controller.actions == []
+
+    hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+    await hass.async_block_till_done()
+    assert fake_controller.actions == [f"021.230-04-{action}"]
+
+    # Reloading the entry while running doesn't move the blind again
+    fake_controller.clear()
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert fake_controller.actions == []
 
 
 async def test_bad_hub_id_starts_reauth(

@@ -1,7 +1,8 @@
 """Cover entities for NeoSmartBlinds.
 
 The controller never reports position, so position is estimated from the time a
-blind takes to close (close_time) and restored across restarts.
+blind takes to open (open_time) and close (close_time), and restored across
+restarts.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from homeassistant.core import (
     DOMAIN as HOMEASSISTANT_DOMAIN,
 )
 from homeassistant.core import (
+    CoreState,
     HassJob,
     HomeAssistant,
     callback,
@@ -44,6 +46,7 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.util import dt as dt_util
 
@@ -62,6 +65,8 @@ from .const import (
     DOMAIN,
     EXPLICIT_POSITIONING,
     LEGACY_POSITIONING,
+    SYNC_NONE,
+    SYNC_OPEN,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -156,7 +161,7 @@ class _Move:
     start_position: int
     target: int
     started: datetime
-    close_time: float
+    travel_time: float  # seconds to travel the full height in this direction
     needs_stop: bool
     cancel_timer: Callable[[], None] | None = None
 
@@ -166,13 +171,13 @@ class _Move:
 
     @property
     def duration(self) -> float:
-        return abs(self.target - self.start_position) * self.close_time / 100
+        return abs(self.target - self.start_position) * self.travel_time / 100
 
     def estimate(self) -> int:
         elapsed = (dt_util.utcnow() - self.started).total_seconds()
         if self.duration <= 0 or elapsed >= self.duration:
             return self.target
-        travelled = elapsed * 100 / self.close_time
+        travelled = elapsed * 100 / self.travel_time
         return round(self.start_position + self.direction * travelled)
 
     def cancel(self) -> None:
@@ -248,20 +253,39 @@ class NeoSmartBlindsCover(CoverEntity, RestoreEntity):
         await super().async_added_to_hass()
         self._move_area_to_device()
         blind = self._blind
-        if (
+        last = await self.async_get_last_state()
+        if last is not None and isinstance(
+            pos := last.attributes.get(ATTR_CURRENT_POSITION), int
+        ):
+            self._position = pos
+        elif last is not None and last.state == CoverState.CLOSED:
+            # Mode 0 has no position attribute; keep open/closed across restarts
+            self._position = 0
+        elif (
             blind.percent_support != LEGACY_POSITIONING
             and blind.start_position is not None
         ):
+            # Nothing saved yet (first start): assume the configured position
             self._position = max(0, min(100, int(blind.start_position)))
-        elif (last := await self.async_get_last_state()) is not None:
-            if isinstance(pos := last.attributes.get(ATTR_CURRENT_POSITION), int):
-                self._position = pos
-            elif last.state == CoverState.CLOSED:
-                # Mode 0 has no position attribute; keep open/closed across restarts
-                self._position = 0
+        if blind.startup_sync != SYNC_NONE and self.hass.state is not CoreState.running:
+            # Only when Home Assistant starts, not when the entry is reloaded
+            self.async_on_remove(async_at_started(self.hass, self._async_startup_sync))
         if blind.group is not None:
             self.async_on_remove(blind.group.register(blind.unique_id))
         self.async_on_remove(blind.add_favourite_listener(self._on_favourite))
+
+    async def _async_startup_sync(self, _hass: HomeAssistant) -> None:
+        """Drive the blind to a known end so the estimated position is real."""
+        _LOGGER.debug(
+            "%s re-syncing position: %s", self.entity_id, self._blind.startup_sync
+        )
+        try:
+            if self._blind.startup_sync == SYNC_OPEN:
+                await self.async_open_cover()
+            else:
+                await self.async_close_cover()
+        except HomeAssistantError as err:
+            _LOGGER.warning("Couldn't re-sync %s at startup: %s", self.entity_id, err)
 
     def _move_area_to_device(self) -> None:
         """Move an area set on the entity onto the blind's device.
@@ -356,9 +380,10 @@ class NeoSmartBlindsCover(CoverEntity, RestoreEntity):
         start = self._estimated_position
         await send()
         self._cancel_move()
-        move = _Move(
-            start, target, dt_util.utcnow(), self._blind.close_time, needs_stop
+        travel_time = (
+            self._blind.open_time if target > start else self._blind.close_time
         )
+        move = _Move(start, target, dt_util.utcnow(), travel_time, needs_stop)
         self._move = move
         self._position = target
         _LOGGER.debug(

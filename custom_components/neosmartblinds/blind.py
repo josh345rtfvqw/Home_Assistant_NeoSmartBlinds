@@ -33,10 +33,12 @@ from .const import (
     CONF_BLIND_CODE,
     CONF_CLOSE_TIME,
     CONF_MOTOR_CODE,
+    CONF_OPEN_TIME,
     CONF_PARENT,
     CONF_PERCENT_SUPPORT,
     CONF_RAIL,
     CONF_START_POSITION,
+    CONF_STARTUP_SYNC,
     CONF_TDBU_EXTENDED,
     CONF_TILT,
     DEFAULT_CLOSE_TIME,
@@ -47,6 +49,7 @@ from .const import (
     RAIL_BOTH,
     RAIL_BOTTOM,
     RAIL_TOP,
+    SYNC_NONE,
 )
 from .group import NeoGroup
 
@@ -119,6 +122,10 @@ class NeoBlind:
             data.get(CONF_PERCENT_SUPPORT, LEGACY_POSITIONING)
         )
         self.close_time: float = float(data.get(CONF_CLOSE_TIME, DEFAULT_CLOSE_TIME))
+        # Blinds often rise slower than they drop; without an open time assume
+        # both directions take the same time.
+        self.open_time: float = float(data.get(CONF_OPEN_TIME) or self.close_time)
+        self.startup_sync: str = data.get(CONF_STARTUP_SYNC, SYNC_NONE)
         self.start_position: int | None = data.get(CONF_START_POSITION)
         self.parent: str | None = data.get(CONF_PARENT) or None
         self.unique_id: str = subentry.unique_id or blind_unique_id(dict(data))

@@ -40,11 +40,13 @@ from .const import (
     CONF_CLOSE_TIME,
     CONF_HUB_ID,
     CONF_MOTOR_CODE,
+    CONF_OPEN_TIME,
     CONF_PARENT,
     CONF_PERCENT_SUPPORT,
     CONF_PROTOCOL,
     CONF_RAIL,
     CONF_START_POSITION,
+    CONF_STARTUP_SYNC,
     CONF_TDBU_EXTENDED,
     CONF_TILT,
     DEFAULT_CLOSE_TIME,
@@ -60,6 +62,9 @@ from .const import (
     RAIL_BOTH,
     RAIL_TOP,
     SUBENTRY_BLIND,
+    SYNC_CLOSE,
+    SYNC_NONE,
+    SYNC_OPEN,
     TDBU_EXTENDED_MOTOR_CODES,
 )
 
@@ -356,6 +361,22 @@ def _blind_schema() -> vol.Schema:
                     mode=NumberSelectorMode.BOX,
                 )
             ),
+            vol.Optional(CONF_OPEN_TIME): NumberSelector(
+                NumberSelectorConfig(
+                    min=1,
+                    max=600,
+                    step=1,
+                    unit_of_measurement="s",
+                    mode=NumberSelectorMode.BOX,
+                )
+            ),
+            vol.Required(CONF_STARTUP_SYNC, default=SYNC_NONE): SelectSelector(
+                SelectSelectorConfig(
+                    options=[SYNC_NONE, SYNC_OPEN, SYNC_CLOSE],
+                    translation_key=CONF_STARTUP_SYNC,
+                    mode=SelectSelectorMode.LIST,
+                )
+            ),
             vol.Optional(CONF_START_POSITION): NumberSelector(
                 NumberSelectorConfig(
                     min=0,
@@ -405,7 +426,10 @@ def _validate_blind(
         CONF_TILT: bool(user_input.get(CONF_TILT, False)),
         CONF_PERCENT_SUPPORT: percent,
         CONF_CLOSE_TIME: int(user_input[CONF_CLOSE_TIME]),
+        CONF_STARTUP_SYNC: user_input.get(CONF_STARTUP_SYNC, SYNC_NONE),
     }
+    if user_input.get(CONF_OPEN_TIME) is not None:
+        data[CONF_OPEN_TIME] = int(user_input[CONF_OPEN_TIME])
     if user_input.get(CONF_START_POSITION) is not None:
         data[CONF_START_POSITION] = int(user_input[CONF_START_POSITION])
     if parent:

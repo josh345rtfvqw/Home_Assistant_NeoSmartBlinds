@@ -20,6 +20,8 @@ CONF_TILT: Final = "tilt"
 CONF_PERCENT_SUPPORT: Final = "percent_support"
 CONF_MOTOR_CODE: Final = "motor_code"
 CONF_START_POSITION: Final = "start_position"
+CONF_OPEN_TIME: Final = "open_time"
+CONF_STARTUP_SYNC: Final = "startup_sync"
 CONF_PARENT: Final = "parent_group"
 
 SUBENTRY_BLIND: Final = "blind"
@@ -29,6 +31,11 @@ PROTOCOL_TCP: Final = "tcp"
 DEFAULT_PORTS: Final = {PROTOCOL_HTTP: 8838, PROTOCOL_TCP: 8839}
 
 DEFAULT_CLOSE_TIME: Final = 20
+
+# startup_sync: move the blind to a known end when Home Assistant starts
+SYNC_NONE: Final = "none"
+SYNC_OPEN: Final = "open"
+SYNC_CLOSE: Final = "close"
 
 BLIND_CODE_RE: Final = re.compile(r"^\d{3}\.\d{3}-\d{2}$")
 

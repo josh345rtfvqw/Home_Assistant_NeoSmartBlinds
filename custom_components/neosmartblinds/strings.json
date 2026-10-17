@@ -92,6 +92,8 @@
             "tilt": "Supports tilt",
             "percent_support": "Positioning mode",
             "close_time": "Close time",
+            "open_time": "Open time",
+            "startup_sync": "Re-sync when Home Assistant starts",
             "start_position": "Start position",
             "parent_group": "Room code (parent group)"
           },
@@ -104,7 +106,9 @@
             "tilt": "Turn on for blinds whose slats tilt. Adds tilt open and close controls (the side arrows), which send the motor small micro-steps. Leave off for roller blinds.",
             "percent_support": "The controller never reports where a blind is, so Home Assistant estimates it from the close time. Choose mode 1 only if the % position switch works for this blind in the Neo app. Modes 1 and 2 show a position slider; mode 0 shows up, stop and down buttons.",
             "close_time": "Seconds the blind takes to go from fully open to fully closed. Not shown in the Neo app: time it with a stopwatch.",
-            "start_position": "Optional. The position (0 closed, 100 open) to assume when Home Assistant starts, in modes 1 and 2. Leave empty to restore the last known position.",
+            "open_time": "Optional. Seconds the blind takes to go from fully closed to fully open, if that differs from the close time (blinds often rise slower). Leave empty to use the close time.",
+            "startup_sync": "Home Assistant can't ask the controller where a blind is, so the estimate drifts when someone uses the remote or the Neo app. Choose open or close to move the blind fully that way whenever Home Assistant starts, so the position is known again. Updates and restarts will move the blind.",
+            "start_position": "Optional. The position (0 closed, 100 open) to assume the first time, before Home Assistant has saved one, in modes 1 and 2. After that the last known position is always restored.",
             "parent_group": "Optional. The Room Code from the blind's settings page in the Neo app (ends in -15). When every blind with the same room code gets the same command within 250 ms, one room command is sent instead."
           }
         },
@@ -119,6 +123,8 @@
             "tilt": "Supports tilt",
             "percent_support": "Positioning mode",
             "close_time": "Close time",
+            "open_time": "Open time",
+            "startup_sync": "Re-sync when Home Assistant starts",
             "start_position": "Start position",
             "parent_group": "Room code (parent group)"
           },
@@ -131,7 +137,9 @@
             "tilt": "Turn on for blinds whose slats tilt. Adds tilt open and close controls (the side arrows), which send the motor small micro-steps. Leave off for roller blinds.",
             "percent_support": "The controller never reports where a blind is, so Home Assistant estimates it from the close time. Choose mode 1 only if the % position switch works for this blind in the Neo app. Modes 1 and 2 show a position slider; mode 0 shows up, stop and down buttons.",
             "close_time": "Seconds the blind takes to go from fully open to fully closed. Not shown in the Neo app: time it with a stopwatch.",
-            "start_position": "Optional. The position (0 closed, 100 open) to assume when Home Assistant starts, in modes 1 and 2. Leave empty to restore the last known position.",
+            "open_time": "Optional. Seconds the blind takes to go from fully closed to fully open, if that differs from the close time (blinds often rise slower). Leave empty to use the close time.",
+            "startup_sync": "Home Assistant can't ask the controller where a blind is, so the estimate drifts when someone uses the remote or the Neo app. Choose open or close to move the blind fully that way whenever Home Assistant starts, so the position is known again. Updates and restarts will move the blind.",
+            "start_position": "Optional. The position (0 closed, 100 open) to assume the first time, before Home Assistant has saved one, in modes 1 and 2. After that the last known position is always restored.",
             "parent_group": "Optional. The Room Code from the blind's settings page in the Neo app (ends in -15). When every blind with the same room code gets the same command within 250 ms, one room command is sent instead."
           }
         }
@@ -168,6 +176,13 @@
         "0": "0 - Favourites only: open, close, stop and favourites",
         "1": "1 - Send position to the blind (motor must support positions)",
         "2": "2 - Emulate position: move up or down, then stop after the calculated time"
+      }
+    },
+    "startup_sync": {
+      "options": {
+        "none": "Don't move the blind",
+        "open": "Open fully",
+        "close": "Close fully"
       }
     }
   },

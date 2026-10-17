@@ -64,7 +64,9 @@ On the controller's entry, choose **Add blind**.
 | Supports tilt | Turn on for blinds whose slats tilt. Adds the tilt open/close controls (micro-steps). Off by default. |
 | Positioning mode | See below. |
 | Close time | Seconds the blind takes to go from fully open to fully closed. Time it with a stopwatch. |
-| Start position | Optional. The position to assume when Home Assistant starts (modes 1 and 2). Leave empty to restore the last known position. |
+| Open time | Optional. Seconds from fully closed to fully open, if it differs from the close time (blinds often rise slower). Empty means the same as the close time. |
+| Re-sync when Home Assistant starts | Don't move the blind (default), Open fully, or Close fully. See [Keeping the position accurate](#keeping-the-position-accurate). |
+| Start position | Optional. The position to assume the first time, before Home Assistant has saved one (modes 1 and 2). After that the last known position is always restored. |
 | Room code (parent group) | Optional. The room code (ending `-15`) shared by blinds in the same room. See [Room commands](#room-commands). |
 
 ![Blind Code](doc_images/app_blind_codes.jpg)
@@ -77,13 +79,19 @@ To change a blind or the controller later, use **Reconfigure** on it. A blind ke
 |---|---|---|
 | **0 – Favourites only** | No position. The blind shows up, stop and down buttons instead of a slider; use the favourite buttons for favourite positions. | Any motor. |
 | **1 – Send position to the blind** | Sends the position (`01`–`99`) and the blind goes there by itself. | Motor codes `no`, `db`, `ra`, `rb`, `ap`, `bl`, `mb`, `jo` on the top rail. |
-| **2 – Emulate position** | Moves up or down, then sends stop after the time calculated from the close time. | Any motor. Accuracy depends on the close time. |
+| **2 – Emulate position** | Moves up or down, then sends stop after the time calculated from the open and close times. | Any motor. Accuracy depends on those times. |
 
 In every mode, position 0 and 100 (and anything below 2 or above 98) send a plain close or open, without a stop. While a blind is moving, its position is updated every second.
 
 If you ask for a new position while the blind is moving, and the blind is already heading that way, the move is extended or shortened without stopping. If the new position is behind the blind, it stops and then moves back.
 
-The position drifts if the blind is moved with the Neo app or a remote, because Home Assistant has no way to find out. Fully opening or closing the blind from Home Assistant brings them back in step. An automation that opens or closes the blinds when Home Assistant starts does this too.
+### Keeping the position accurate
+
+The controller never reports where a blind is, so the position is an estimate. Home Assistant saves it and restores it after a restart.
+
+- **Set both times.** Time the blind closing *and* opening; if they differ, fill in **Open time** as well as **Close time**.
+- **Full open and close re-sync.** Opening or closing fully always runs the motor to its end stop, so the position is exact afterwards.
+- **Re-sync at startup.** The estimate drifts if the blind is moved with the Neo app or a remote. Set **Re-sync when Home Assistant starts** to *Open fully* or *Close fully* to move the blind to that end every time Home Assistant starts (not when the integration is merely reloaded). Remember this also happens after updates and restarts at night.
 
 For HomeKit, use mode 1 or 2 so the position in the Home app makes sense.
 
@@ -121,7 +129,7 @@ The old options map to the new form like this:
 | YAML | UI |
 |---|---|
 | `host`, `hub_id`, `protocol`, `port` | Controller entry |
-| `name`, `blind_code`, `motor_code`, `rail`, `percent_support`, `close_time`, `start_position`, `parent_group` | Blind |
+| `name`, `blind_code`, `motor_code`, `rail`, `percent_support`, `close_time`, `start_position`, `parent_group` | Blind (`start_position` now only applies before a position has been saved; re-sync and open time are set in the UI) |
 
 ## Protocol reference
 

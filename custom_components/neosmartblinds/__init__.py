@@ -15,9 +15,9 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import NeoClient
 from .blind import NeoBlind
 from .const import CONF_HUB_ID, CONF_PARENT, CONF_PROTOCOL, DOMAIN, SUBENTRY_BLIND
+from .group import NeoGroup
 
 _LOGGER = logging.getLogger(__name__)
-from .group import NeoGroup
 
 PLATFORMS: list[Platform] = [Platform.BUTTON, Platform.COVER]
 
