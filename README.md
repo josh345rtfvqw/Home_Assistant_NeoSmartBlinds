@@ -65,7 +65,7 @@ On the controller's entry, choose **Add blind**.
 | Motor code | Shown under the blind code in the Neo app, for example `bf`. Pick it from the list (each code is shown with its motor name, such as `bf – Bofu (standard)`), or type it. Some controllers (such as the C-BR300) need it. |
 | Rail | For top-down/bottom-up blinds: top/middle rail, bottom/lower rail, or both. Ordinary blinds use the top rail. |
 | Extended top-down/bottom-up commands | Only for top-down/bottom-up blinds with `mb`, `ra`, `ap` or `db` motors. These use the newer `u4`/`d4`/`x2` command set; `tb` motors use the standard set. |
-| Supports tilt | Turn on for blinds whose slats tilt. Adds the tilt open/close controls (micro-steps). Off by default. |
+| Supports tilt | Turn on for blinds whose slats tilt. Adds the tilt open/close controls (micro-steps). Off by default. Some motors, such as Wistar/Alpha (`wt`), ignore micro-steps. |
 | Positioning mode | See below. |
 | Close time | Seconds the blind takes to go from fully open to fully closed. Time it with a stopwatch. |
 | Open time | Optional. Seconds from fully closed to fully open, if it differs from the close time (blinds often rise slower). Empty means the same as the close time. |
@@ -110,6 +110,9 @@ The **room cover** uses this: opening, closing, stopping or positioning it sends
 All commands to a controller are queued and spaced at least 0.7 s apart, as the controller's documentation asks.
 
 ### Sending other commands
+
+> [!WARNING]
+> **Use at your own risk.** Raw commands are sent to the motor exactly as given. They may do nothing on your blinds, and some Neo commands are *programming* commands that change the motor's settings, such as its limits, direction, favourites or pairing. A wrong one can leave a blind not working properly until your installer sets it up again. Only send commands you know your motor supports.
 
 The **NeoSmartBlinds: Send command** action (`neosmartblinds.send_command`) sends any two-character Neo action to a blind, or to a whole room through its room cover. Use it for commands the cover doesn't offer, such as `i1`/`i2` (intermediate positions on NEO motors), `u4`/`d4` (middle rail on extended top-down/bottom-up blinds) or micro-steps on a blind without **Supports tilt**. The blind's motor code is added for you. See the [protocol reference](#protocol-reference) for the actions.
 

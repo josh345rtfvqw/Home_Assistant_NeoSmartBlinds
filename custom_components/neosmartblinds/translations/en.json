@@ -103,7 +103,7 @@
             "motor_code": "Shown as Motor code under the Blind Code on the same page of the Neo app. Pick it from the list, or type it if it's missing. Some controllers (such as the C-BR300) need it.",
             "rail": "For top-down/bottom-up blinds (the Neo app shows Top-D/Bottom-U: YES). Ordinary blinds use the top rail.",
             "tdbu_extended": "Only for top-down/bottom-up blinds whose motor code is mb, ra, ap or db. Leave off for tb motors and ordinary blinds.",
-            "tilt": "Turn on for blinds whose slats tilt. Adds tilt open and close controls (the side arrows), which send the motor small micro-steps. Leave off for roller blinds.",
+            "tilt": "Turn on for blinds whose slats tilt. Adds tilt open and close controls (the side arrows), which send the motor small micro-steps. Leave off for roller blinds. Some motors, such as Wistar/Alpha (wt), ignore micro-steps.",
             "percent_support": "The controller never reports where a blind is, so Home Assistant estimates it from the close time. Choose mode 1 only if the % position switch works for this blind in the Neo app. Modes 1 and 2 show a position slider; mode 0 shows up, stop and down buttons.",
             "close_time": "Seconds the blind takes to go from fully open to fully closed. Not shown in the Neo app: time it with a stopwatch.",
             "open_time": "Optional. Seconds the blind takes to go from fully closed to fully open, if that differs from the close time (blinds often rise slower). Leave empty to use the close time.",
@@ -134,7 +134,7 @@
             "motor_code": "Shown as Motor code under the Blind Code on the same page of the Neo app. Pick it from the list, or type it if it's missing. Some controllers (such as the C-BR300) need it.",
             "rail": "For top-down/bottom-up blinds (the Neo app shows Top-D/Bottom-U: YES). Ordinary blinds use the top rail.",
             "tdbu_extended": "Only for top-down/bottom-up blinds whose motor code is mb, ra, ap or db. Leave off for tb motors and ordinary blinds.",
-            "tilt": "Turn on for blinds whose slats tilt. Adds tilt open and close controls (the side arrows), which send the motor small micro-steps. Leave off for roller blinds.",
+            "tilt": "Turn on for blinds whose slats tilt. Adds tilt open and close controls (the side arrows), which send the motor small micro-steps. Leave off for roller blinds. Some motors, such as Wistar/Alpha (wt), ignore micro-steps.",
             "percent_support": "The controller never reports where a blind is, so Home Assistant estimates it from the close time. Choose mode 1 only if the % position switch works for this blind in the Neo app. Modes 1 and 2 show a position slider; mode 0 shows up, stop and down buttons.",
             "close_time": "Seconds the blind takes to go from fully open to fully closed. Not shown in the Neo app: time it with a stopwatch.",
             "open_time": "Optional. Seconds the blind takes to go from fully closed to fully open, if that differs from the close time (blinds often rise slower). Leave empty to use the close time.",
@@ -229,11 +229,11 @@
   "services": {
     "send_command": {
       "name": "Send command",
-      "description": "Sends a raw Neo action to a blind, or to a whole room through its room cover. Home Assistant's position estimate isn't changed, so use it for commands the blind cover doesn't offer.",
+      "description": "Sends a raw Neo action to a blind, or to a whole room through its room cover. Use at your own risk: commands may do nothing on your motor, and some are programming commands that can change the blind's settings (limits, direction, favourites or pairing), which may leave it unusable until your installer sets it up again. Home Assistant's position estimate isn't changed.",
       "fields": {
         "command": {
           "name": "Command",
-          "description": "Two letters or digits from the Neo protocol, for example mu or md (micro-step), i1 or i2 (intermediate positions on NEO motors), u4 or d4 (middle rail on extended top-down/bottom-up blinds), or 01-99 (go to a position on motors that support it). The blind's motor code is added automatically."
+          "description": "Two letters or digits from the Neo protocol, for example mu or md (micro-step), i1 or i2 (intermediate positions on NEO motors), u4 or d4 (middle rail on extended top-down/bottom-up blinds), or 01-99 (go to a position on motors that support it). Only send commands you know your motor supports. The blind's motor code is added automatically."
         }
       }
     }
