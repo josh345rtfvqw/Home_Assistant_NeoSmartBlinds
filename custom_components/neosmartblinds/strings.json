@@ -1,0 +1,180 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Neo Smart Blinds controller",
+        "description": "Add a Neo Smart Blinds controller. Blinds are added afterwards, from the controller's entry.",
+        "data": {
+          "host": "Host",
+          "protocol": "Protocol",
+          "port": "Port",
+          "hub_id": "Controller ID"
+        },
+        "data_description": {
+          "host": "IP address of the controller, from Your Controllers in the Neo app. Give it a fixed address in your router.",
+          "protocol": "HTTP reports errors such as a wrong controller ID; TCP only echoes the command back.",
+          "port": "Leave empty for the default: 8838 for HTTP, 8839 for TCP.",
+          "hub_id": "The 24 character ID shown under the controller in the Neo app. Required for HTTP."
+        }
+      },
+      "reconfigure": {
+        "title": "Change controller settings",
+        "data": {
+          "host": "Host",
+          "protocol": "Protocol",
+          "port": "Port",
+          "hub_id": "Controller ID"
+        },
+        "data_description": {
+          "host": "IP address of the controller, from Your Controllers in the Neo app. Give it a fixed address in your router.",
+          "protocol": "HTTP reports errors such as a wrong controller ID; TCP only echoes the command back.",
+          "port": "Leave empty for the default: 8838 for HTTP, 8839 for TCP.",
+          "hub_id": "The 24 character ID shown under the controller in the Neo app. Required for HTTP."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Controller ID rejected",
+        "description": "The controller at {host} rejected the controller ID. Enter the ID shown under the controller in the Neo app.",
+        "data": {
+          "hub_id": "Controller ID"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to the controller. Check the host, protocol and port.",
+      "hub_id_required": "The controller ID is required for HTTP.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This controller is already configured.",
+      "reconfigure_successful": "The controller settings were updated.",
+      "reauth_successful": "The controller ID was updated.",
+      "blind_imported": "The blind was added to an existing controller.",
+      "invalid_protocol": "Protocol must be http or tcp.",
+      "invalid_blind_code": "The blind code must use the format 000.000-00.",
+      "invalid_parent_group": "The parent group must use the format 000.000-15.",
+      "invalid_rail": "Rail must be 1, 2 or 3.",
+      "invalid_percent_support": "percent_support must be 0, 1 or 2."
+    }
+  },
+  "config_subentries": {
+    "blind": {
+      "entry_type": "Blind",
+      "initiate_flow": {
+        "user": "Add blind"
+      },
+      "step": {
+        "user": {
+          "title": "Add a blind",
+          "data": {
+            "name": "Name",
+            "blind_code": "Blind code",
+            "motor_code": "Motor code",
+            "rail": "Rail",
+            "tdbu_extended": "Extended top-down/bottom-up commands",
+            "percent_support": "Positioning mode",
+            "close_time": "Close time",
+            "start_position": "Start position",
+            "parent_group": "Room code (parent group)"
+          },
+          "data_description": {
+            "name": "Name shown in Home Assistant.",
+            "blind_code": "From the blind's advanced page in the Neo app, for example 021.230-04. Use the room code (channel 15) to control a whole room as one cover.",
+            "motor_code": "Shown under the blind code in the Neo app. Required by some controllers (for example C-BR300).",
+            "rail": "For top-down/bottom-up blinds; ordinary blinds use the top rail.",
+            "tdbu_extended": "Only for top-down/bottom-up blinds with mb, ra, ap or db motors. Uses the u4/d4/x2 command set.",
+            "percent_support": "The controller never reports position, so it is always estimated from the close time.",
+            "close_time": "Seconds the blind takes to go from fully open to fully closed. Time it with a stopwatch.",
+            "start_position": "Position to assume when Home Assistant starts (positioning modes 1 and 2). Leave empty to restore the last known position.",
+            "parent_group": "Room code (ending in -15) shared by the blinds in this room. When every blind in the room gets the same command within 250 ms, one room command is sent instead."
+          }
+        },
+        "reconfigure": {
+          "title": "Change blind settings",
+          "data": {
+            "name": "Name",
+            "blind_code": "Blind code",
+            "motor_code": "Motor code",
+            "rail": "Rail",
+            "tdbu_extended": "Extended top-down/bottom-up commands",
+            "percent_support": "Positioning mode",
+            "close_time": "Close time",
+            "start_position": "Start position",
+            "parent_group": "Room code (parent group)"
+          },
+          "data_description": {
+            "name": "Name shown in Home Assistant.",
+            "blind_code": "From the blind's advanced page in the Neo app, for example 021.230-04. Use the room code (channel 15) to control a whole room as one cover.",
+            "motor_code": "Shown under the blind code in the Neo app. Required by some controllers (for example C-BR300).",
+            "rail": "For top-down/bottom-up blinds; ordinary blinds use the top rail.",
+            "tdbu_extended": "Only for top-down/bottom-up blinds with mb, ra, ap or db motors. Uses the u4/d4/x2 command set.",
+            "percent_support": "The controller never reports position, so it is always estimated from the close time.",
+            "close_time": "Seconds the blind takes to go from fully open to fully closed. Time it with a stopwatch.",
+            "start_position": "Position to assume when Home Assistant starts (positioning modes 1 and 2). Leave empty to restore the last known position.",
+            "parent_group": "Room code (ending in -15) shared by the blinds in this room. When every blind in the room gets the same command within 250 ms, one room command is sent instead."
+          }
+        }
+      },
+      "error": {
+        "invalid_blind_code": "Use the format 000.000-00.",
+        "invalid_motor_code": "Motor codes are two letters or digits, for example bf.",
+        "tdbu_extended_motor": "The extended command set only applies to motor codes mb, ra, ap and db.",
+        "parent_is_blind": "The room code must differ from the blind code.",
+        "position_not_supported": "Sending positions needs the top rail, the standard command set and a motor code of no, db, ra, rb, ap, bl, mb or jo. Use mode 2 instead.",
+        "already_configured": "This blind and rail are already set up on this controller."
+      },
+      "abort": {
+        "reconfigure_successful": "The blind was updated."
+      }
+    }
+  },
+  "selector": {
+    "protocol": {
+      "options": {
+        "http": "HTTP (port 8838)",
+        "tcp": "TCP (port 8839)"
+      }
+    },
+    "rail": {
+      "options": {
+        "1": "Top / middle rail (ordinary blinds)",
+        "2": "Bottom / lower rail",
+        "3": "Both rails"
+      }
+    },
+    "percent_support": {
+      "options": {
+        "0": "0 - Favourites only: open, close, stop and favourites",
+        "1": "1 - Send position to the blind (motor must support positions)",
+        "2": "2 - Emulate position: move up or down, then stop after the calculated time"
+      }
+    }
+  },
+  "entity": {
+    "button": {
+      "favourite_1": {
+        "name": "Favourite position 1"
+      },
+      "favourite_2": {
+        "name": "Favourite position 2"
+      }
+    }
+  },
+  "exceptions": {
+    "invalid_hub_id": {
+      "message": "The controller rejected the controller ID. Re-authenticate the integration with the correct ID."
+    },
+    "command_failed": {
+      "message": "Sending {command} to the controller failed: {error}"
+    },
+    "position_not_enabled": {
+      "message": "Positioning mode 0 only accepts 50 (favourite 1) and 51 (favourite 2). Change the blind's positioning mode to use other positions."
+    }
+  },
+  "issues": {
+    "yaml_import_failed": {
+      "title": "NeoSmartBlinds YAML blind could not be imported",
+      "description": "The blind {name} in configuration.yaml could not be imported ({reason}). Fix it in YAML and restart, or add it from the UI, then remove the YAML entry."
+    }
+  }
+}

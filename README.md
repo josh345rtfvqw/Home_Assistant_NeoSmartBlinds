@@ -1,174 +1,146 @@
-# Custom Component for NeoSmartBlinds Integration on Home Assistant
+# NeoSmartBlinds for Home Assistant
 
-The NeoSmartBlinds platform allows you to control a NeoSmartBlind / group of NeoSmartBlinds via a NeoSmartBlinds controller.
+Control blinds connected to a [Neo Smart Blinds](https://neosmartblinds.com) controller from Home Assistant, over the controller's local HTTP or TCP API. Nothing goes through the cloud.
 
-There is currently support for the following device types within Home Assistant:
+Version 3 is a rewrite. It is set up from the UI, and existing YAML configurations are imported automatically (see [Upgrading from 2.x](#upgrading-from-2x)).
 
--   Cover
+## What you get
+
+For each blind:
+
+- a **cover** entity: open, close, stop, set position and, where the motor supports it, tilt (micro-step up and down);
+- a **Favourite position 1** button, plus **Favourite position 2** for NEO (`no`) and Raex (`rx`) motors, or when no motor code is set.
+
+Each blind is its own device, linked to a device for the controller.
+
+The controller never reports where a blind is, so the position is always an estimate based on how long the blind takes to close. The cover is marked as an assumed state, so Home Assistant shows open and close buttons instead of a toggle.
 
 ## Installation
 
-To begin with it is recommended you ensure your NeoSmartBlinds controller has a static IP addresses, you may need to configure this via your router's DHCP options.
+Give the controller a fixed IP address in your router first.
 
-1. Download the latest release from: https://github.com/mtgeekman/Home_Assistant_NeoSmartBlinds/releases
-2. Extract the file
-3. Copy the whole **neosmartblinds** folder from **custom_components/** to your own **config/custom_components/** directory
-4. Go to Config -> Server Controls -> Under "Server Management" click restart
-5. Go to configuration example for how to setup your config.
+**HACS:** add `https://github.com/mtgeekman/Home_Assistant_NeoSmartBlinds` as a custom repository (type: Integration), install **NeoSmart Blinds**, and restart Home Assistant.
 
-Alternatively, you can install through [HACS](https://hacs.xyz) by adding this repository.
+**Manual:** copy `custom_components/neosmartblinds` into your `config/custom_components/` folder and restart Home Assistant.
 
+Requires Home Assistant 2025.8 or newer.
 
-# Cover Configuration 
+## Setup
 
-### Example of basic configuration.yaml
-```
-cover:
-  - platform: neosmartblinds
-    name: Blind One
-    host: 192.168.0.13
-    hub_id: 000000000000000000000000
-    protocol: http
-    port: 8838
-    blind_code: 021.230-04
-    close_time: 30
-    rail: 1
-    percent_support: 1
-    motor_code: bf
-    start_position: 50
-    parent_group: 021.230-15
-```
+### 1. Add the controller
 
-## Configuration variables
+**Settings → Devices & services → Add integration → NeoSmartBlinds.**
 
-cover:
+| Field | |
+|---|---|
+| Host | The controller's IP address, from **Your Controllers** in the Neo app. |
+| Protocol | `HTTP` (port 8838) or `TCP` (port 8839). HTTP is recommended: the controller reports a wrong controller ID or a bad command. TCP only echoes the command back. |
+| Port | Leave empty for the protocol's default. |
+| Controller ID | The 24 character ID under the controller in the Neo app. Required for HTTP. |
 
-**platform** (String)(Required) <br>
-Must be set to neosmartblinds
-
-**host** _(String)(Required)_<br>
-The IP of the NeoSmartBlinds controller, e.g., 192.168.0.10.
-
-Getting the IP:
+Home Assistant checks that it can open a connection to the controller. It does not send a command, so it cannot check the controller ID at this point. If the ID is wrong, the first command fails and Home Assistant asks you to re-enter it.
 
 ![Getting the IP](doc_images/app_controller_ip.jpg)
-
-
-
-**hub_id** _(String)(Required)_<br>
-The 24 character device ID of the Smart Blinds Hub, found in the APP
-
-![App Main Screen](doc_images/app_main_window.jpg)
-![App Menu](doc_images/app_menu.jpg)
 ![App Controllers](doc_images/app_controllers.jpg)
 
-**protocol** _(String)(Required)_<br>
-The protocol to use for sending commands. (http, tcp)
+### 2. Add blinds
 
-**port** _(String)(Required)_<br>
-Port use for the connection.  for TCP use 8839, for HTTP use 8838
+On the controller's entry, choose **Add blind**.
 
-**name** _(String)(Required)_<br>
-The name you would like to give to the NeoSmartBlind.
-
-**blind_code** _(String)(Required)_<br>
-The blind code. - This is available from the NeoSmartBlind app<br>
-Getting the codes: 
+| Field | |
+|---|---|
+| Name | Name shown in Home Assistant. |
+| Blind code | From the blind's advanced page in the Neo app, in the form `ID1.ID2-CHANNEL`, for example `021.230-04`. Use the room code (channel `15`) to control a whole room as one cover. |
+| Motor code | Shown under the blind code in the Neo app, for example `bf`. Some controllers (such as the C-BR300) need it. |
+| Rail | For top-down/bottom-up blinds: top/middle rail, bottom/lower rail, or both. Ordinary blinds use the top rail. |
+| Extended top-down/bottom-up commands | Only for top-down/bottom-up blinds with `mb`, `ra`, `ap` or `db` motors. These use the newer `u4`/`d4`/`x2` command set; `tb` motors use the standard set. |
+| Positioning mode | See below. |
+| Close time | Seconds the blind takes to go from fully open to fully closed. Time it with a stopwatch. |
+| Start position | Optional. The position to assume when Home Assistant starts (modes 1 and 2). Leave empty to restore the last known position. |
+| Room code (parent group) | Optional. The room code (ending `-15`) shared by blinds in the same room. See [Room commands](#room-commands). |
 
 ![Blind Code](doc_images/app_blind_codes.jpg)
 
-- Room Code: will control all blinds in that room
-- Blind Code: will controll only that blind
+To change a blind or the controller later, use **Reconfigure** on it. A blind keeps its entity when you change its settings.
 
-**“​ID1.ID2-CHANNEL”**<br>
-**“ID1”** : controller byte 1, from integer “000” to “255”<br>
-**“.”** : address separator<br>
-**“ID2”** : controller byte 2, from integer “000” to “255”<br>
-**“-”** : channel separator<br>
-**“CHANNEL”** : channel, individual channel from integer “01” to “14”, use channel “15” for a group
+### Positioning modes
 
-**close_time** _(String)(Required)_<br>
-Time taken in seconds to close this blind (use a stop watch to measure)
+| Mode | Set position does | Use with |
+|---|---|---|
+| **0 – Favourites only** | Only `50` (favourite 1) and `51` (favourite 2) are accepted, as in 2.x. Other values give an error. Open, close and stop work as normal. | Any motor. Use the favourite buttons instead. |
+| **1 – Send position to the blind** | Sends the position (`01`–`99`) and the blind goes there by itself. | Motor codes `no`, `db`, `ra`, `rb`, `ap`, `bl`, `mb`, `jo` on the top rail. |
+| **2 – Emulate position** | Moves up or down, then sends stop after the time calculated from the close time. | Any motor. Accuracy depends on the close time. |
 
-**rail** _(string)_<br>
-Rail Number used to determine top or bottom rail on top down/bottom up blinds. <br>
-1 = Top Rail<br>
-2 = Bottom Rail
+In every mode, position 0 and 100 (and anything below 2 or above 98) send a plain close or open, without a stop. While a blind is moving, its position is updated every second.
 
-**percent_support** _(int)_<br>
-Determines how requests to position by percentage are handled. As the blinds do not report back their position, this integration can only estimate the position based on the close_time option <br>
-0 = No support (Default)<br>
-1 = Percentage positioning supported directly by blind, integration only reports position based on estimate<br>
-2 = Percentage positioning emulated completely by this integration.
+If you ask for a new position while the blind is moving, and the blind is already heading that way, the move is extended or shortened without stopping. If the new position is behind the blind, it stops and then moves back.
 
-Notes:
-- If the blind is controlled outside of HA (e.g. in native app, using remote), this integration has no mechanism to discover the position from the hub so HA will get out of sync with the blind.
-- For the same reason, the integration will initialise on startup according to start_position. This is a guess. Issuing an open or close command to the blind (through this integration) will allow the positions to sync. Depending on setup, an automation that listens for HA to start could be used to either open or close the blinds to get them into sync.
-- If exposing the blind via HomeKit, either option 1 or 2 should be selected to keep the actual position and Home in sync. 
+The position drifts if the blind is moved with the Neo app or a remote, because Home Assistant has no way to find out. Fully opening or closing the blind from Home Assistant brings them back in step. An automation that opens or closes the blinds when Home Assistant starts does this too.
 
-**motor_code** _(string)_<br>
-Defines the motor code listed in the neo smart blinds app on your phone.  Listed below the 'Blind Code' on the control page for the blind <br>
-This is required for some smart hubs to work (model C-BR300) 
+For HomeKit, use mode 1 or 2 so the position in the Home app makes sense.
 
-**start_position** _(int)_<br>
-Optional starting position for the blind when HA starts up. If not specified, the integration will restore the position saved from the last time HA was shutdown. This value is ignored if percent_support is zero.
+### Room commands
 
-**parent_group** _(String)_<br>
-See blind_code for instructions on how to find the room code. This parameter is optional. <br>
-If the same group is specified for multiple blinds, the integration will pause briefly (250ms) before issuing a command to see whether to 
-send to the individual blind or to the parent group. As the hub is limited in the number of requests it can handle, this can help in cases
-where multiple blinds are controlled in home assistant or via Homekit / Alexa etc. 
+The controller handles one command at a time, and needs about half a second for each. Moving five blinds one by one therefore takes a few seconds.
 
-<br><br>
+If several blinds have the same **room code**, and every one of them gets the same command within 250 ms (from a scene, an area, a HomeKit room or an automation), one room command is sent instead. If only some of them get the command, each is sent its own command after the 250 ms wait. Blinds without a room code are sent commands straight away.
 
+All commands to a controller are queued and spaced at least 0.7 s apart, as the controller's documentation asks.
 
-Entity Options in UI:
+## Upgrading from 2.x
 
-![Entity Options](doc_images/EntityOptions.JPG)
+Your `cover: - platform: neosmartblinds` YAML entries are imported when Home Assistant starts:
 
-Entity Control allows for fine adjustment and extra controls:
+1. Install 3.0.0 and restart.
+2. A NeoSmartBlinds controller entry appears under **Settings → Devices & services**, with one blind per YAML entry. Blinds with the same `hub_id` (or host) end up under the same controller.
+3. Your existing entities are kept, with the same entity IDs, history and customisations.
+4. A repair notice asks you to remove the YAML. Remove the `neosmartblinds` entries from `configuration.yaml` and restart. After that, change settings from the UI.
 
-![Entity Control](doc_images/EntityControl.JPG)
+If a YAML entry can't be imported (for example, a blind code in the wrong format), a repair notice says which one and why. Fix it in YAML and restart, or add the blind from the UI.
 
-Lovelace ui panel provides basic control
+### What changed
 
-![Lovelace UI panel](doc_images/Lovelace_UI_Panel.JPG)
+- **The tilt slider no longer selects favourites.** Use the **Favourite position 1/2** buttons, or in mode 0 set the position to 50 or 51 as before. Tilt open/close still send micro-steps.
+- `protocol` is no longer case-sensitive, and the port defaults to 8838 for HTTP and 8839 for TCP.
+- `rail` accepts `3` (both rails), and there is an option for the extended top-down/bottom-up command set (`u4`/`d4`/`x2`).
+- Errors from the controller are shown when a command fails, instead of only being logged. A rejected controller ID starts a re-authentication flow.
+- In mode 0, Home Assistant restores the last position at startup instead of always starting at 50.
+- The `requests` dependency is gone. The integration uses Home Assistant's own HTTP session.
+- HACS installs from the repository instead of a release zip.
 
-## Supported features
+The old options map to the new form like this:
 
-**Open**
-Up
+| YAML | UI |
+|---|---|
+| `host`, `hub_id`, `protocol`, `port` | Controller entry |
+| `name`, `blind_code`, `motor_code`, `rail`, `percent_support`, `close_time`, `start_position`, `parent_group` | Blind |
 
-**Close**
-Down
+## Protocol reference
 
-**Tilt-Up**
-Micro-Up
+Commands have the form `ID1.ID2-CHANNEL-ACTION!MOTORCODE`, for example `021.230-04-up!bf`. Over HTTP they are sent as `GET http://<host>:8838/neo/v1/transmit?command=…&id=<controller id>&hash=<7 digits>`. Over TCP, port 8839 receives the command plus CRLF and echoes it back.
 
-**Tilt-Down**
-Micro-Down
+| Action | Sent for |
+|---|---|
+| `up`, `dn`, `sp` | Open, close, stop (top rail) |
+| `mu`, `md` | Tilt open/close (top rail) |
+| `01`–`99` | Set position in mode 1. The value is percent *closed*, so Home Assistant 30 % open is sent as `70`. |
+| `gp`, `i2` | Favourite 1, favourite 2 |
+| `u2`, `d2`, `o2`, `c2` | Bottom rail: open, close, tilt open, tilt close |
+| `u3`, `d3` | Both rails |
+| `u4`, `d4`, `x2` | Extended top-down/bottom-up: middle rail open/close, stop |
 
-**Set-Position & Favourite Position** - please note this is calculated using the close_time
+## Development
 
-   ### Setting the position if "percent_support" is 0:
-   
-   **==50** will set your blind to its stored first favourite position 
+```bash
+python3.13 -m venv .venv
+```
 
-   **==51** will set your blind to its stored second favourite position 
+```bash
+.venv/bin/pip install -r requirements_test.txt
+```
 
-   ### Setting the position if "percent_support" is 1:
-   
-   **Setting position** Use the position slider to select how, blind will move to that position
-      
-   **Setting favorite postion 1** Use the tilt slider to select a value less than 50
-   
-   **Setting favorite postion 2** Use the tilt slider to select a value greater than 50
+```bash
+.venv/bin/pytest
+```
 
-   ### Setting the position if "percent_support" is 2:
-   
-   **Setting position** Use the position slider to select how, integration will move blind to position and then send stop command
-      
-   **Setting favorite postion 1** Use the tilt slider to select a value less than 50
-   
-   **Setting favorite postion 2** Use the tilt slider to select a value greater than 50
-
+The tests run a fake controller on localhost that speaks both HTTP and TCP.

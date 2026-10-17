@@ -8,10 +8,15 @@
 releases/neosmartblinds_v1.7z
 releases/neosmartblinds_v1.zip
 
-neosmartblinds/
+/neosmartblinds/
 
 releases/
 
 venv/
 
 *.zip
+
+.venv/
+.pytest_cache/
+__pycache__/
+.DS_Store

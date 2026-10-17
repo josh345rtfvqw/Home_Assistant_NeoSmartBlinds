@@ -1,9 +1,13 @@
 {
   "domain": "neosmartblinds",
-  "documentation": "https://github.com/mtgeekman/Home_Assistant_NeoSmartBlinds/blob/master/README.md",
-  "issue_tracker": "https://github.com/mtgeekman/Home_Assistant_NeoSmartBlinds/issues",
-  "codeowners": ["4n0nD3v3l0p3r","mtgeekman","clara-j","gee-jay-bee"],
   "name": "NeoSmartBlinds",
-  "version": "2.3.3",
-  "requirements": ["requests>=2.31.0"]
+  "codeowners": ["@mtgeekman", "@4n0nD3v3l0p3r", "@clara-j", "@gee-jay-bee"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/mtgeekman/Home_Assistant_NeoSmartBlinds/blob/master/README.md",
+  "integration_type": "hub",
+  "iot_class": "assumed_state",
+  "issue_tracker": "https://github.com/mtgeekman/Home_Assistant_NeoSmartBlinds/issues",
+  "requirements": [],
+  "version": "3.0.0"
 }

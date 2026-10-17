@@ -1,603 +1,415 @@
-"""Support for NeoSmartBlinds covers."""
+"""Cover entities for NeoSmartBlinds.
+
+The controller never reports position, so position is estimated from the time a
+blind takes to close (close_time) and restored across restarts.
+"""
+
+from __future__ import annotations
+
 import asyncio
-import aiohttp
 import logging
-import time
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Any
 
-from homeassistant.components.cover import PLATFORM_SCHEMA
-from custom_components.neosmartblinds.neo_smart_blind import NeoSmartBlind
 import voluptuous as vol
-import homeassistant.helpers.config_validation as cv
-import functools as ft
-from homeassistant.helpers.restore_state import RestoreEntity
-
 from homeassistant.components.cover import (
+    ATTR_CURRENT_POSITION,
+    ATTR_POSITION,
+    CoverDeviceClass,
     CoverEntity,
     CoverEntityFeature,
-    ATTR_CURRENT_POSITION
 )
-
-from homeassistant.const import (
-    CONF_HOST,
-    CONF_NAME,
+from homeassistant.components.cover import (
+    PLATFORM_SCHEMA as COVER_PLATFORM_SCHEMA,
 )
+from homeassistant.config_entries import SOURCE_IMPORT
+from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
+from homeassistant.core import (
+    DOMAIN as HOMEASSISTANT_DOMAIN,
+)
+from homeassistant.core import (
+    HassJob,
+    HomeAssistant,
+    callback,
+)
+from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.event import async_call_later, async_track_time_interval
+from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from homeassistant.util import dt as dt_util
 
+from . import NeoConfigEntry
+from .blind import NeoBlind
 from .const import (
-    CONF_DEVICE,
+    CONF_BLIND_CODE,
     CONF_CLOSE_TIME,
-    CONF_ID,
-    CONF_PROTOCOL,
-    CONF_PORT,
-    CONF_RAIL,
-    CONF_PERCENT_SUPPORT,
+    CONF_HUB_ID,
     CONF_MOTOR_CODE,
-    CONF_START_POSITION,
     CONF_PARENT,
-    DATA_NEOSMARTBLINDS,
-    LEGACY_POSITIONING,
+    CONF_PERCENT_SUPPORT,
+    CONF_PROTOCOL,
+    CONF_RAIL,
+    CONF_START_POSITION,
+    DOMAIN,
     EXPLICIT_POSITIONING,
-    IMPLICIT_POSITIONING,
-    ACTION_STOPPED,
-    ACTION_OPENING,
-    ACTION_CLOSING
-)
-
-PARALLEL_UPDATES = 0
-
-SUPPORT_NEOSMARTBLINDS = (
-    CoverEntityFeature.OPEN
-    | CoverEntityFeature.CLOSE
-    | CoverEntityFeature.SET_POSITION
-    | CoverEntityFeature.OPEN_TILT
-    | CoverEntityFeature.CLOSE_TILT
-    | CoverEntityFeature.SET_TILT_POSITION
-    | CoverEntityFeature.STOP
+    LEGACY_POSITIONING,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-LOGGER = logging.getLogger(__name__)
+PARALLEL_UPDATES = 0
 
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
+PROGRESS_INTERVAL = timedelta(seconds=1)
+
+# Old YAML options, kept so existing configurations can be imported.
+PLATFORM_SCHEMA = COVER_PLATFORM_SCHEMA.extend(
     {
-        vol.Required(CONF_HOST, description="hostname / IP of hub"): cv.string,
-        vol.Required(CONF_NAME, description="name of blind to appear in HA"): cv.string,
-        vol.Required(CONF_DEVICE, description="ID Code of blind in app"): cv.string,
-        vol.Required(CONF_CLOSE_TIME, description="Time (seconds) it takes for blind to move from fully open to closed", 
-                     default=20): cv.positive_int,
-        vol.Required(CONF_ID, description="ID of hub"): cv.string,
-        vol.Required(CONF_PROTOCOL, description="Either http or tcp", default="http"): cv.string,
-        vol.Required(CONF_PORT, description="port of hub (usually: http=8838, tcp=8839)", default=8838): cv.port,
-        vol.Required(CONF_RAIL, description="rail to move", default=1): cv.positive_int,
-        vol.Required(CONF_PERCENT_SUPPORT, 
-                     description="0=favourite positioning only, 1=send percent positioning commands to hub, 2=use up / down commands to estimate position", 
-                     default=0): cv.positive_int,
-        vol.Required(CONF_MOTOR_CODE, description="ID Code of motor in app", default=''): cv.string,
-        vol.Optional(CONF_START_POSITION, description="If percent positioning mode is enabled, this value will be used as the starting position else it will be restored from the last run"): cv.positive_int,
-        vol.Optional(CONF_PARENT, description="Parent group code in app"): cv.string,
+        vol.Required(CONF_HOST): cv.string,
+        vol.Required(CONF_NAME): cv.string,
+        vol.Required(CONF_BLIND_CODE): cv.string,
+        vol.Optional(CONF_CLOSE_TIME, default=20): cv.positive_int,
+        vol.Required(CONF_HUB_ID): cv.string,
+        vol.Optional(CONF_PROTOCOL, default="http"): cv.string,
+        vol.Optional(CONF_PORT, default=8838): cv.port,
+        vol.Optional(CONF_RAIL, default=1): cv.positive_int,
+        vol.Optional(CONF_PERCENT_SUPPORT, default=0): cv.positive_int,
+        vol.Optional(CONF_MOTOR_CODE, default=""): cv.string,
+        vol.Optional(CONF_START_POSITION): cv.positive_int,
+        vol.Optional(CONF_PARENT): cv.string,
     }
 )
 
+_IMPORT_LOCK = f"{DOMAIN}_import_lock"
 
-async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
-    """Set up NeoSmartBlinds cover."""
-    cover = NeoSmartBlindsCover(
-        hass,
-        config.get(CONF_NAME),
-        config.get(CONF_HOST),
-        config.get(CONF_ID),
-        config.get(CONF_DEVICE),
-        config.get(CONF_CLOSE_TIME),
-        config.get(CONF_PROTOCOL),
-        config.get(CONF_PORT),
-        config.get(CONF_RAIL),
-        config.get(CONF_PERCENT_SUPPORT),
-        config.get(CONF_MOTOR_CODE),
-        config.get(CONF_START_POSITION),
-        config.get(CONF_PARENT)
+
+async def async_setup_platform(
+    hass: HomeAssistant,
+    config: ConfigType,
+    async_add_entities: Callable[..., None],
+    discovery_info: DiscoveryInfoType | None = None,
+) -> None:
+    """Import a YAML-configured blind into a config entry."""
+    data = {k: v for k, v in config.items() if k != "platform"}
+    # Each YAML blind is imported separately; run them one at a time so blinds on
+    # the same controller end up in the same entry.
+    lock = hass.data.setdefault(_IMPORT_LOCK, asyncio.Lock())
+    async with lock:
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": SOURCE_IMPORT}, data=data
         )
-    async_add_entities([cover])
+    if result["type"] is FlowResultType.ABORT and result["reason"] not in (
+        "already_configured",
+        "blind_imported",
+    ):
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            f"yaml_import_failed_{result['reason']}",
+            is_fixable=False,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key="yaml_import_failed",
+            translation_placeholders={
+                "name": str(config[CONF_NAME]),
+                "reason": str(result["reason"]),
+            },
+        )
+        return
+    ir.async_create_issue(
+        hass,
+        HOMEASSISTANT_DOMAIN,
+        f"deprecated_yaml_{DOMAIN}",
+        breaks_in_ha_version=None,
+        is_fixable=False,
+        issue_domain=DOMAIN,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="deprecated_yaml",
+        translation_placeholders={
+            "domain": DOMAIN,
+            "integration_title": "NeoSmartBlinds",
+        },
+    )
 
-def compute_wait_time(larger, smaller, close_time):
-    """
-    Helper function to estimate how long to wait for a blind move to complete.
 
-    The caller must determine direction and specify the larger value. The positions
-    provided are %.
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: NeoConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+) -> None:
+    """Set up a cover for each blind subentry."""
+    for subentry_id, blind in entry.runtime_data.blinds.items():
+        async_add_entities([NeoSmartBlindsCover(blind)], config_subentry_id=subentry_id)
 
-    make sure we are returning a positive number, otherwise the time is instant.
-    """
-    return abs(((larger - smaller) * close_time) / 100)
 
-class PositioningRequest(object):
-    """
-    Helper class for monitoring and reacting to a blind position change
-    """
-    def __init__(self, target_position, starting_position, needs_stop):
-        self._target_position = target_position
-        self._starting_position = starting_position
-        # Event to interrupt pending positioning attempts and either cancel or recalculate the delay
-        self._interrupt = asyncio.Event()
-        # Time at which the positioning attempt began
-        self._start = time.time()
-        # Active wait (will be None until the wait coroutine begins)
-        self._active_wait = None
-        # If interrupted to adjust the wait time, this is the new wait time
-        self._adjusted_wait = None
-        # Indicates whether the pending positioning attempt requires the entity to call stop once complete
-        self._needs_stop = needs_stop
+@dataclass
+class _Move:
+    """A movement in progress, used to estimate position."""
+
+    start_position: int
+    target: int
+    started: datetime
+    close_time: float
+    needs_stop: bool
+    cancel_timer: Callable[[], None] | None = None
 
     @property
-    def needs_stop(self):
-        return self._needs_stop
+    def direction(self) -> int:
+        return 1 if self.target > self.start_position else -1
 
     @property
-    def target_position(self):
-        return self._target_position
+    def duration(self) -> float:
+        return abs(self.target - self.start_position) * self.close_time / 100
 
-    @property
-    def starting_position(self):
-        return self._starting_position
+    def estimate(self) -> int:
+        elapsed = (dt_util.utcnow() - self.started).total_seconds()
+        if self.duration <= 0 or elapsed >= self.duration:
+            return self.target
+        travelled = elapsed * 100 / self.close_time
+        return round(self.start_position + self.direction * travelled)
 
-    async def async_wait(self, reason, cover):
-        """
-        Wait on the positioning request to complete.
-
-        Can be interrupted by adjust() or interrupt().
-        """
-        elapsed = 0
-        while True:
-            LOGGER.info(
-                '{} sleeping for {} to allow for {} to {}, elapsed={}'.format(cover.name, self._active_wait, reason,
-                                                                              self._target_position, elapsed))
-            await asyncio.wait_for(
-                asyncio.create_task(self._interrupt.wait()), self._active_wait - elapsed
-                )
-            elapsed = time.time() - self._start
-            if self._adjusted_wait is not None:
-                # compute adjusted target position given interrupt
-                self._active_wait = self._adjusted_wait
-                self._adjusted_wait = None
-                self._interrupt.clear()
-            else:
-                break
-        return elapsed
-
-    async def async_wait_for_move_up(self, cover):
-        """
-        Wait for the blind to move up to the target position
-
-        Returns whether the request was interrupted and a new target position was computed.
-        """
-        was_interrupted = False
-
-        self._active_wait = compute_wait_time(self._target_position, self._starting_position, cover.close_time)
-        try:
-            elapsed = await self.async_wait('open', cover)
-            if elapsed < self._active_wait:
-                self._target_position = int(
-                    self._starting_position + (
-                        self._target_position - self._starting_position) * elapsed / self._active_wait
-                    )
-                was_interrupted = True
-        except asyncio.TimeoutError:
-            # all done
-            pass 
-
-        return was_interrupted
-
-    async def async_wait_for_move_down(self, cover):
-        """
-        Wait for the blind to move down to the target position
-
-        Returns whether the request was interrupted and a new target position was computed.
-        """
-        was_interrupted = False
-
-        self._active_wait = compute_wait_time(self._starting_position, self._target_position, cover.close_time)
-        try:
-            elapsed = await self.async_wait('close', cover)
-            if elapsed < self._active_wait:
-                self._target_position = int(
-                    self._starting_position - (
-                        self._starting_position - self._target_position) * elapsed / self._active_wait
-                    )
-                was_interrupted = True
-        except asyncio.TimeoutError:
-            # all done
-            pass 
-
-        return was_interrupted
-
-    def is_moving_up(self):
-        """
-        Indicates whether the blind is moving up
-        """
-        return self._target_position > self._starting_position
-
-    def estimate_current_position(self):
-        """
-        Compute an estimated position of the ongoing request based on elapsed time
-        """
-        # If the wait coro hasn't been awaited, this will be None. The position is simply the start.
-        if not self._active_wait:
-            return self._starting_position
-            
-        elapsed = time.time() - self._start
-        if self.is_moving_up():
-            return int(
-                self._starting_position + (
-                    self._target_position - self._starting_position) * elapsed / self._active_wait
-                )            
-        else:
-            return int(
-                self._starting_position - (
-                    self._starting_position - self._target_position) * elapsed / self._active_wait
-                )
-
-    def adjust(self, target_position, cover):
-        """
-        Attempt to adjust the ongoing request to a new target_position.
-        Return estimated current position if the ongoing request can't be adjusted, None otherwise
-        """
-        cur = self.estimate_current_position()
-        if self.is_moving_up():
-            if cur <= target_position:
-                self._target_position = target_position
-                self._adjusted_wait = compute_wait_time(target_position, self._starting_position, cover.close_time)
-                self.interrupt()
-                return
-        else:
-            if cur >= target_position:
-                self._target_position = target_position
-                self._adjusted_wait = compute_wait_time(self._starting_position, target_position, cover.close_time)
-                self.interrupt()
-                return
-        LOGGER.info('{} estimated position is {}, force direction change'.format(cover.name, cur))
-        return cur
-
-    def interrupt(self):
-        """
-        Interrupt the ongoing request
-        """
-        self._interrupt.set()
+    def cancel(self) -> None:
+        if self.cancel_timer is not None:
+            self.cancel_timer()
+            self.cancel_timer = None
 
 
 class NeoSmartBlindsCover(CoverEntity, RestoreEntity):
-    """Representation of a NeoSmartBlinds cover."""
+    """A Neo blind; position is estimated, never reported by the controller."""
 
-    def __init__(self, home_assistant, name, host, the_id, device, close_time, protocol, port, rail, percent_support, 
-                 motor_code, starting_position, parent_code):
-        """Initialize the cover."""
-        self.home_assistant = home_assistant
-        self._name = name
-        # This isn't ideal but there is no feedback from the blind / hub about position.
-        self._percent_support = percent_support
-        if self._percent_support > 0:
-            self._current_position = starting_position
-        else:
-            self._current_position = 50
-        self._close_time = int(close_time)
-        # Used to advertise state to ha
-        self._current_action = ACTION_STOPPED
-        # Pending positioning request
-        self._pending_positioning_command = None
-        # Event used to cleanly cancel a positioning command and stop the blind
-        self._stopped = None
-        
-        def http_session_factory(timeout):
-            """
-            Closure used to give the client a HTTP session that is shared by all covers
-            """
-            if DATA_NEOSMARTBLINDS not in self.home_assistant.data:
-                t = aiohttp.ClientTimeout(total=timeout)
-                self.home_assistant.data[DATA_NEOSMARTBLINDS] = aiohttp.ClientSession(timeout=t)
+    _attr_has_entity_name = True
+    _attr_name = None
+    _attr_device_class = CoverDeviceClass.BLIND
+    _attr_assumed_state = True
+    _attr_should_poll = False
 
-            return self.home_assistant.data[DATA_NEOSMARTBLINDS]
+    def __init__(self, blind: NeoBlind) -> None:
+        """Initialise the cover."""
+        self._blind = blind
+        self._attr_unique_id = blind.unique_id
+        self._attr_device_info = blind.device_info
+        features = (
+            CoverEntityFeature.OPEN
+            | CoverEntityFeature.CLOSE
+            | CoverEntityFeature.STOP
+            | CoverEntityFeature.SET_POSITION
+        )
+        if blind.commands.micro_up and blind.commands.micro_down:
+            features |= CoverEntityFeature.OPEN_TILT | CoverEntityFeature.CLOSE_TILT
+        self._attr_supported_features = features
+        self._position = 50
+        self._move: _Move | None = None
+        self._cancel_progress: Callable[[], None] | None = None
+        self._done_job = HassJob(self._async_move_done, cancel_on_shutdown=True)
 
-        self._client = NeoSmartBlind(host,
-                                    the_id,
-                                    device,    
-                                    port,
-                                    protocol,
-                                    rail,
-                                    motor_code,
-                                    parent_code,
-                                    http_session_factory)
+    # State ------------------------------------------------------------------
 
     @property
-    def close_time(self):
-        """Return the close time"""
-        return self._close_time
+    def current_cover_position(self) -> int:
+        """Return the (estimated) position, 0 closed and 100 open."""
+        if self._move is not None:
+            return self._move.estimate()
+        return self._position
 
     @property
-    def pending_positioning_command(self):
-        """Return the pending position command"""
-        return self._pending_positioning_command
+    def is_closed(self) -> bool:
+        """Return whether the blind is closed."""
+        return self._move is None and self._position == 0
 
     @property
-    def name(self):
-        """Return the name of the NeoSmartBlinds device."""
-        return self._name
+    def is_opening(self) -> bool:
+        """Return whether the blind is opening."""
+        return self._move is not None and self._move.direction > 0
 
     @property
-    def unique_id(self):
-        """Return a unique id for the entity"""
-        return self._client.unique_id(DATA_NEOSMARTBLINDS)
+    def is_closing(self) -> bool:
+        """Return whether the blind is closing."""
+        return self._move is not None and self._move.direction < 0
 
-    @property
-    def should_poll(self):
-        """No polling needed within NeoSmartBlinds."""
-        return False
-
-    @property
-    def supported_features(self):
-        """Flag supported features."""
-        return SUPPORT_NEOSMARTBLINDS
-
-    @property
-    def device_class(self):
-        """Define this cover as either window/blind/awning/shutter."""
-        return "blind"
-        
-    @property
-    def is_closed(self):
-        """Return if the cover is closed."""
-        return self._current_position == 0
-
-    @property
-    def is_closing(self):
-        """Return if the cover is closing."""
-        return self._current_action == ACTION_CLOSING
-
-    @property
-    def is_opening(self):
-        """Return if the cover is opening."""
-        return self._current_action == ACTION_OPENING
-
-    @property
-    def current_cover_position(self):
-        """Return current position of cover."""
-        return self._current_position
-
-    @property
-    def current_cover_tilt_position(self):
-        """Return current position of cover tilt."""
-        return 50
-
-    async def async_added_to_hass(self):
-        """Complete the initialization."""
+    async def async_added_to_hass(self) -> None:
+        """Restore position and join the room group."""
         await super().async_added_to_hass()
-        last_state = await self.async_get_last_state()
-        if self._current_position is None:
-            if last_state is not None and ATTR_CURRENT_POSITION in last_state.attributes:
-                self._current_position = last_state.attributes[ATTR_CURRENT_POSITION]
+        blind = self._blind
+        if (
+            blind.percent_support != LEGACY_POSITIONING
+            and blind.start_position is not None
+        ):
+            self._position = max(0, min(100, int(blind.start_position)))
+        elif (last := await self.async_get_last_state()) is not None and isinstance(
+            pos := last.attributes.get(ATTR_CURRENT_POSITION), int
+        ):
+            self._position = pos
+        if blind.group is not None:
+            self.async_on_remove(blind.group.register(blind.unique_id))
+        self.async_on_remove(blind.add_favourite_listener(self._on_favourite))
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Cancel timers."""
+        self._cancel_move()
+
+    # Services ---------------------------------------------------------------
+
+    async def async_open_cover(self, **kwargs: Any) -> None:
+        """Open fully."""
+        await self._async_start_move(100, self._blind.async_up, needs_stop=False)
+
+    async def async_close_cover(self, **kwargs: Any) -> None:
+        """Close fully."""
+        await self._async_start_move(0, self._blind.async_down, needs_stop=False)
+
+    async def async_stop_cover(self, **kwargs: Any) -> None:
+        """Stop moving."""
+        await self._blind.async_stop()
+        self._halt()
+
+    async def async_open_cover_tilt(self, **kwargs: Any) -> None:
+        """Micro-step up."""
+        await self._blind.async_micro_up()
+
+    async def async_close_cover_tilt(self, **kwargs: Any) -> None:
+        """Micro-step down."""
+        await self._blind.async_micro_down()
+
+    async def async_set_cover_position(self, **kwargs: Any) -> None:
+        """Move to a position."""
+        position: int = kwargs[ATTR_POSITION]
+        blind = self._blind
+
+        if blind.percent_support == LEGACY_POSITIONING:
+            # v1/v2 behaviour: 50 and 51 select favourite 1 and 2.
+            if position in (50, 51):
+                await blind.async_favourite(1 if position == 50 else 2)
             else:
-                self._current_position = 50
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN, translation_key="position_not_enabled"
+                )
+            return
 
-    async def async_close_cover(self, **kwargs):
-        """Fully close the cover."""
-        # Be pessimistic and ensure that a command is always issued. To do this, ensure
-        # any pending request is stopped first
-        if self._pending_positioning_command is not None:
-            await self.async_stop_cover_partially()
-            
-        await self.async_close_cover_to(0)
-        
-    async def async_close_cover_to(self, target_position, move_command=None):
-        """
-        Close the cover to the target_position specified.
-        The caller is responsible for determining that getting to the target_position requires the
-        blind to close!
-        If specified, move_command is a coroutine used to move the blind else a down command is issued.
-        """
-        # Create an event to manage clean stop for this positioning attempt
-        self._stopped = asyncio.Event()
-        self._pending_positioning_command = PositioningRequest(target_position, self._current_position, 
-                                                               not (target_position == 0 or move_command))
+        # The controller only accepts 01-99; treat the ends as full open/close.
+        if position > 98:
+            await self.async_open_cover()
+            return
+        if position < 2:
+            await self.async_close_cover()
+            return
 
-        # Set the current position of the entity to the target
-        self._current_position = target_position
-        self._current_action = ACTION_CLOSING
+        if (move := self._move) is not None:
+            current = move.estimate()
+            ahead = position >= current if move.direction > 0 else position <= current
+            if ahead and position != current:
+                await self._async_retarget(move, position)
+                return
+            # Wrong direction (or already there): stop before moving again
+            await self._blind.async_stop()
+            self._halt()
 
-        # Issue the move command
-        if await self._client.async_down_command() if move_command is None else await move_command():
-            LOGGER.info('{} closing to {}'.format(self._name, target_position))
-            # Put the positioning request on the ha queue to run in parallel but don't await it here (we want to continue)
-            self.hass.async_create_task(self.async_cover_closed_to_position())
-            # Finally, update the state to reflect that the command is in flight
-            self.async_write_ha_state()
+        if position == self._position:
+            return
+        if blind.percent_support == EXPLICIT_POSITIONING:
+            await self._async_start_move(
+                position, lambda: blind.async_position(position), needs_stop=False
+            )
         else:
-            # The request failed, just go through the motions of completion
-            self.cover_change_complete(False)
+            send = blind.async_up if position > self._position else blind.async_down
+            await self._async_start_move(position, send, needs_stop=True)
 
-    async def async_open_cover(self, **kwargs):
-        """Fully open the cover."""
-        # Be pessimistic and ensure that a command is always issued. To do this, ensure
-        # any pending request is stopped first
-        if self._pending_positioning_command is not None:
-            await self.async_stop_cover_partially()
+    # Movement tracking ------------------------------------------------------
 
-        await self.async_open_cover_to(100)
+    async def _async_start_move(
+        self,
+        target: int,
+        send: Callable[[], Awaitable[None]],
+        *,
+        needs_stop: bool,
+    ) -> None:
+        """Send the command and track the move until it should be complete."""
+        start = self.current_cover_position
+        await send()
+        self._cancel_move()
+        move = _Move(
+            start, target, dt_util.utcnow(), self._blind.close_time, needs_stop
+        )
+        self._move = move
+        self._position = target
+        _LOGGER.debug(
+            "%s moving %s -> %s over %.1fs",
+            self.entity_id,
+            start,
+            target,
+            move.duration,
+        )
+        self._schedule_done(move)
+        self._cancel_progress = async_track_time_interval(
+            self.hass, self._progress, PROGRESS_INTERVAL, cancel_on_shutdown=True
+        )
+        self.async_write_ha_state()
 
-    async def async_open_cover_to(self, target_position, move_command=None):
-        """
-        Close the cover to the target_position specified.
-        The caller is responsible for determining that getting to the target_position requires the
-        blind to close!
-        If specified, move_command is a coroutine used to move the blind else a down command is issued.
-        """
-        # Create an event to manage clean stop for this positioning attempt
-        self._stopped = asyncio.Event()
-        self._pending_positioning_command = PositioningRequest(target_position, self._current_position, 
-                                                               not (target_position == 100 or move_command))
-
-        # Set the current position of the entity to the target
-        self._current_position = target_position
-        self._current_action = ACTION_OPENING
-
-        # Issue the move command
-        if await self._client.async_up_command() if move_command is None else await move_command():
-            LOGGER.info('{} opening to {}'.format(self._name, target_position))
-            # Put the positioning request on the ha queue to run in parallel but don't await it here (we want to continue)
-            self.hass.async_create_task(self.async_cover_opened_to_position())
-            # Finally, update the state to reflect that the command is in flight
-            self.async_write_ha_state()
+    async def _async_retarget(self, move: _Move, position: int) -> None:
+        """Change the target of a move already heading the right way."""
+        if self._blind.percent_support == EXPLICIT_POSITIONING:
+            await self._blind.async_position(position)
+            move.needs_stop = False
         else:
-            # The request failed, just go through the motions of completion
-            self.cover_change_complete(False)
+            move.needs_stop = True
+        move.target = position
+        self._position = position
+        move.cancel()
+        self._schedule_done(move)
+        self.async_write_ha_state()
 
-    async def async_cover_closed_to_position(self):
-        """
-        Coroutine to deal with completion of positioning request down.
-        """
-        # Wait for the request to run to its completion
-        if not await self.pending_positioning_command.async_wait_for_move_down(self):
-            # If the request completed fully but needs an explicit stop to finish off, trigger it now
-            if self.pending_positioning_command.needs_stop:
-                await self._client.async_stop_command()
-        self.cover_change_complete()
+    def _schedule_done(self, move: _Move) -> None:
+        remaining = move.duration - (dt_util.utcnow() - move.started).total_seconds()
+        move.cancel_timer = async_call_later(
+            self.hass, max(remaining, 0), self._done_job
+        )
 
-    async def async_cover_opened_to_position(self):
-        # Wait for the request to run to its completion
-        if not await self.pending_positioning_command.async_wait_for_move_up(self):
-            # If the request completed fully but needs an explicit stop to finish off, trigger it now
-            if self.pending_positioning_command.needs_stop:
-                await self._client.async_stop_command()
-        self.cover_change_complete()
+    async def _async_move_done(self, _now: datetime) -> None:
+        """The blind should have reached its target."""
+        move = self._move
+        if move is None:
+            return
+        move.cancel_timer = None
+        self._cancel_move()
+        self._position = move.target
+        self.async_write_ha_state()
+        if move.needs_stop:
+            try:
+                await self._blind.async_stop()
+            except HomeAssistantError as err:
+                _LOGGER.warning("%s: could not stop blind: %s", self.entity_id, err)
 
-    def cover_change_complete(self, result=True):
-        """
-        Manage completion of a positioning request by cleaning everything up.
-        """
-        # If the completion issued and awaited a stop command, defend against a situation
-        # that the command was cleaned up in parallel (NB. this might be a hangover from
-        # the initial async conversion where the IO itself was sync and moved to the worker
-        # pool so this defence may not strictly be necessary).
-        if self.pending_positioning_command is not None:
-            # Update the entity state
-            self._current_action = ACTION_STOPPED
-            if result:
-                self._current_position = self.pending_positioning_command.target_position
-                LOGGER.info('{} move done {}'.format(self._name, self._current_position))
-            else:
-                self._current_position = self.pending_positioning_command.starting_position
-            self._pending_positioning_command = None
-            # Signal to any other awaiting coroutines that the stop has completed fully
-            if self._stopped is None:
-                if result:
-                    LOGGER.error('{} move done but state broken'.format(self._name))
-            else:
-                self._stopped.set()
-            # Finally, notify ha of the state change
-            self.async_write_ha_state()
+    @callback
+    def _progress(self, _now: datetime) -> None:
+        self.async_write_ha_state()
 
-    async def async_stop_cover(self, **kwargs):
-        """Stop the cover."""
-        await self.async_stop_cover_partially()
-        if self.pending_positioning_command is not None:
-            LOGGER.info('{} stopped and cleaning up'.format(self._name))
-            self._pending_positioning_command = None
-            self._stopped = None
+    @callback
+    def _halt(self) -> None:
+        """Forget the current move, keeping the estimated position."""
+        if self._move is not None:
+            self._position = self._move.estimate()
+        self._cancel_move()
+        self.async_write_ha_state()
 
-    async def async_stop_cover_partially(self):
-        """Stop the cover."""
-        LOGGER.info('{} stop'.format(self._name))
-        await self._client.async_stop_command()
-        if self.pending_positioning_command is not None:
-            # Interrupt any pending positioning requests
-            self.pending_positioning_command.interrupt()
-            # Wait for the command to stop completely
-            await self._stopped.wait()
-            # NB. EVERYTHING must be happening on the main event thread to guarantee that it 
-            # is safe to do this here
-            self._stopped = None
-        else:
-            # Just make sure the state is correct (though there's a consistency issue here if 
-            # this isn't already the case)
-            self._current_action = ACTION_STOPPED
-        
-    async def async_open_cover_tilt(self, **kwargs):
-        await self._client.async_open_cover_tilt()
-        """Open the cover tilt."""
-        
-    async def async_close_cover_tilt(self, **kwargs):
-        await self._client.async_close_cover_tilt()
-        """Close the cover tilt."""
+    @callback
+    def _cancel_move(self) -> None:
+        if self._move is not None:
+            self._move.cancel()
+            self._move = None
+        if self._cancel_progress is not None:
+            self._cancel_progress()
+            self._cancel_progress = None
 
-    async def async_set_cover_position(self, **kwargs):
-        """Move the cover to a specific position."""
-        await self.async_adjust_blind(kwargs['position'])
-
-    async def async_set_fav_position(self, pos):
-        # Position doesn't resemble reality so the state is likely to get out of step
-        position = await self._client.async_set_fav_position(pos)
-        if isinstance(position, int):
-            self._current_position = position
-            self.async_write_ha_state()
-
-    async def async_set_cover_tilt_position(self, **kwargs):
-        await self.async_set_fav_position(kwargs['tilt_position'])
-
-    """Adjust the blind based on the pos value send"""
-    async def async_adjust_blind(self, pos):
-
-        """Legacy support for using position to set favorites"""
-        if self._percent_support == LEGACY_POSITIONING:
-            if pos == 50 or pos == 51:
-                await self.async_set_fav_position(pos)
-        else:
-            """Always allow full open / close commands to get through"""
-
-            if pos > 98:
-                """
-                Unable to send 100 to the API so assume anything greater then 98 is just an open command.
-                Use the same logic irrespective of mode for consistency.            
-                """
-                pos = 100
-            if pos < 2:
-                """Assume anything greater less than 2 is just a close command"""
-                pos = 0
-
-            """Check for any change in position, only act if it has changed"""
-            delta = 0
-
-            """
-            Work out whether the blind is already moving.
-            If yes, work out whether it is moving in the right direction.
-                If yes, just adjust the pending timeout.
-                If no, cancel the existing timer and issue a fresh positioning command
-            if not, issue a positioning command
-            """
-            if self._pending_positioning_command is not None:
-                estimated_position = self._pending_positioning_command.adjust(pos, self)
-                # The estimated position will be returned if the cover is moving in the wrong direction
-                if estimated_position is not None:
-                    # STOP then issue new command
-                    await self.async_stop_cover_partially()
-                    delta = pos - estimated_position
-                elif self._percent_support == EXPLICIT_POSITIONING:
-                    # just issue the new position, the wait is adjusted already
-                    await self._client.async_set_position_by_percent(pos)
-                # else: adjustment handled silently, leave delta at zero so no command is sent
-            else:
-                # New command, nothing in-flight -- compute the delta
-                delta = pos - self._current_position
-
-            if delta > 0:
-                if self._percent_support == IMPLICIT_POSITIONING or pos == 100:
-                    await self.async_open_cover_to(pos)
-                elif self._percent_support == EXPLICIT_POSITIONING:
-                    await self.async_open_cover_to(
-                        pos, 
-                        ft.partial(self._client.async_set_position_by_percent, pos)
-                    )
-
-            if delta < 0:
-                if self._percent_support == IMPLICIT_POSITIONING or pos == 0:
-                    await self.async_close_cover_to(pos)
-                elif self._percent_support == EXPLICIT_POSITIONING:
-                    await self.async_close_cover_to(
-                        pos, 
-                        ft.partial(self._client.async_set_position_by_percent, pos)
-                    )
+    @callback
+    def _on_favourite(self, number: int) -> None:
+        """A favourite was selected; the real position is unknown."""
+        position = self.current_cover_position
+        self._cancel_move()
+        if self._blind.percent_support == LEGACY_POSITIONING:
+            # Matches v2: the slider shows 50 for favourite 1 and 51 for favourite 2
+            position = 50 if number == 1 else 51
+        self._position = position
+        self.async_write_ha_state()
