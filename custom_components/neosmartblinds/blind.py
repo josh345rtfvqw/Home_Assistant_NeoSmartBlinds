@@ -38,6 +38,7 @@ from .const import (
     CONF_RAIL,
     CONF_START_POSITION,
     CONF_TDBU_EXTENDED,
+    CONF_TILT,
     DEFAULT_CLOSE_TIME,
     DOMAIN,
     FAV_2_MOTOR_CODES,
@@ -113,6 +114,7 @@ class NeoBlind:
         self.motor_code: str = data.get(CONF_MOTOR_CODE, "") or ""
         self.rail: int = int(data.get(CONF_RAIL, RAIL_TOP))
         self.tdbu_extended: bool = bool(data.get(CONF_TDBU_EXTENDED, False))
+        self.tilt: bool = bool(data.get(CONF_TILT, False))
         self.percent_support: int = int(
             data.get(CONF_PERCENT_SUPPORT, LEGACY_POSITIONING)
         )

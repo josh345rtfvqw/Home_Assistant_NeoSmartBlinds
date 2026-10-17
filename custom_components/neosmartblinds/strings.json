@@ -89,6 +89,7 @@
             "motor_code": "Motor code",
             "rail": "Rail",
             "tdbu_extended": "Extended top-down/bottom-up commands",
+            "tilt": "Supports tilt",
             "percent_support": "Positioning mode",
             "close_time": "Close time",
             "start_position": "Start position",
@@ -100,7 +101,8 @@
             "motor_code": "Shown as Motor code under the Blind Code on the same page of the Neo app. Pick it from the list, or type it if it's missing. Some controllers (such as the C-BR300) need it.",
             "rail": "For top-down/bottom-up blinds (the Neo app shows Top-D/Bottom-U: YES). Ordinary blinds use the top rail.",
             "tdbu_extended": "Only for top-down/bottom-up blinds whose motor code is mb, ra, ap or db. Leave off for tb motors and ordinary blinds.",
-            "percent_support": "The controller never reports where a blind is, so Home Assistant estimates it from the close time. Choose mode 1 only if the % position switch works for this blind in the Neo app.",
+            "tilt": "Turn on for blinds whose slats tilt. Adds tilt open and close controls (the side arrows), which send the motor small micro-steps. Leave off for roller blinds.",
+            "percent_support": "The controller never reports where a blind is, so Home Assistant estimates it from the close time. Choose mode 1 only if the % position switch works for this blind in the Neo app. Modes 1 and 2 show a position slider; mode 0 shows up, stop and down buttons.",
             "close_time": "Seconds the blind takes to go from fully open to fully closed. Not shown in the Neo app: time it with a stopwatch.",
             "start_position": "Optional. The position (0 closed, 100 open) to assume when Home Assistant starts, in modes 1 and 2. Leave empty to restore the last known position.",
             "parent_group": "Optional. The Room Code from the blind's settings page in the Neo app (ends in -15). When every blind with the same room code gets the same command within 250 ms, one room command is sent instead."
@@ -114,6 +116,7 @@
             "motor_code": "Motor code",
             "rail": "Rail",
             "tdbu_extended": "Extended top-down/bottom-up commands",
+            "tilt": "Supports tilt",
             "percent_support": "Positioning mode",
             "close_time": "Close time",
             "start_position": "Start position",
@@ -125,7 +128,8 @@
             "motor_code": "Shown as Motor code under the Blind Code on the same page of the Neo app. Pick it from the list, or type it if it's missing. Some controllers (such as the C-BR300) need it.",
             "rail": "For top-down/bottom-up blinds (the Neo app shows Top-D/Bottom-U: YES). Ordinary blinds use the top rail.",
             "tdbu_extended": "Only for top-down/bottom-up blinds whose motor code is mb, ra, ap or db. Leave off for tb motors and ordinary blinds.",
-            "percent_support": "The controller never reports where a blind is, so Home Assistant estimates it from the close time. Choose mode 1 only if the % position switch works for this blind in the Neo app.",
+            "tilt": "Turn on for blinds whose slats tilt. Adds tilt open and close controls (the side arrows), which send the motor small micro-steps. Leave off for roller blinds.",
+            "percent_support": "The controller never reports where a blind is, so Home Assistant estimates it from the close time. Choose mode 1 only if the % position switch works for this blind in the Neo app. Modes 1 and 2 show a position slider; mode 0 shows up, stop and down buttons.",
             "close_time": "Seconds the blind takes to go from fully open to fully closed. Not shown in the Neo app: time it with a stopwatch.",
             "start_position": "Optional. The position (0 closed, 100 open) to assume when Home Assistant starts, in modes 1 and 2. Leave empty to restore the last known position.",
             "parent_group": "Optional. The Room Code from the blind's settings page in the Neo app (ends in -15). When every blind with the same room code gets the same command within 250 ms, one room command is sent instead."
@@ -183,9 +187,6 @@
     },
     "command_failed": {
       "message": "Sending {command} to the controller failed: {error}"
-    },
-    "position_not_enabled": {
-      "message": "Positioning mode 0 only accepts 50 (favourite 1) and 51 (favourite 2). Change the blind's positioning mode to use other positions."
     }
   },
   "issues": {

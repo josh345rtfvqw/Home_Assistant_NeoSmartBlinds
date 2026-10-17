@@ -20,6 +20,7 @@ from homeassistant.components.cover import (
     CoverDeviceClass,
     CoverEntity,
     CoverEntityFeature,
+    CoverState,
 )
 from homeassistant.components.cover import (
     PLATFORM_SCHEMA as COVER_PLATFORM_SCHEMA,
@@ -198,9 +199,12 @@ class NeoSmartBlindsCover(CoverEntity, RestoreEntity):
             CoverEntityFeature.OPEN
             | CoverEntityFeature.CLOSE
             | CoverEntityFeature.STOP
-            | CoverEntityFeature.SET_POSITION
         )
-        if blind.commands.micro_up and blind.commands.micro_down:
+        # Without positioning the more-info dialog shows open/stop/close buttons
+        # instead of a slider that can't do anything useful.
+        if blind.percent_support != LEGACY_POSITIONING:
+            features |= CoverEntityFeature.SET_POSITION
+        if blind.tilt and blind.commands.micro_up and blind.commands.micro_down:
             features |= CoverEntityFeature.OPEN_TILT | CoverEntityFeature.CLOSE_TILT
         self._attr_supported_features = features
         self._position = 50
@@ -211,8 +215,15 @@ class NeoSmartBlindsCover(CoverEntity, RestoreEntity):
     # State ------------------------------------------------------------------
 
     @property
-    def current_cover_position(self) -> int:
+    def current_cover_position(self) -> int | None:
         """Return the (estimated) position, 0 closed and 100 open."""
+        if self._blind.percent_support == LEGACY_POSITIONING:
+            return None
+        return self._estimated_position
+
+    @property
+    def _estimated_position(self) -> int:
+        """Return the position tracked internally, also in mode 0."""
         if self._move is not None:
             return self._move.estimate()
         return self._position
@@ -242,10 +253,12 @@ class NeoSmartBlindsCover(CoverEntity, RestoreEntity):
             and blind.start_position is not None
         ):
             self._position = max(0, min(100, int(blind.start_position)))
-        elif (last := await self.async_get_last_state()) is not None and isinstance(
-            pos := last.attributes.get(ATTR_CURRENT_POSITION), int
-        ):
-            self._position = pos
+        elif (last := await self.async_get_last_state()) is not None:
+            if isinstance(pos := last.attributes.get(ATTR_CURRENT_POSITION), int):
+                self._position = pos
+            elif last.state == CoverState.CLOSED:
+                # Mode 0 has no position attribute; keep open/closed across restarts
+                self._position = 0
         if blind.group is not None:
             self.async_on_remove(blind.group.register(blind.unique_id))
         self.async_on_remove(blind.add_favourite_listener(self._on_favourite))
@@ -302,16 +315,6 @@ class NeoSmartBlindsCover(CoverEntity, RestoreEntity):
         position: int = kwargs[ATTR_POSITION]
         blind = self._blind
 
-        if blind.percent_support == LEGACY_POSITIONING:
-            # v1/v2 behaviour: 50 and 51 select favourite 1 and 2.
-            if position in (50, 51):
-                await blind.async_favourite(1 if position == 50 else 2)
-            else:
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN, translation_key="position_not_enabled"
-                )
-            return
-
         # The controller only accepts 01-99; treat the ends as full open/close.
         if position > 98:
             await self.async_open_cover()
@@ -350,7 +353,7 @@ class NeoSmartBlindsCover(CoverEntity, RestoreEntity):
         needs_stop: bool,
     ) -> None:
         """Send the command and track the move until it should be complete."""
-        start = self.current_cover_position
+        start = self._estimated_position
         await send()
         self._cancel_move()
         move = _Move(
@@ -429,10 +432,10 @@ class NeoSmartBlindsCover(CoverEntity, RestoreEntity):
     @callback
     def _on_favourite(self, number: int) -> None:
         """A favourite was selected; the real position is unknown."""
-        position = self.current_cover_position
+        position = self._estimated_position
         self._cancel_move()
-        if self._blind.percent_support == LEGACY_POSITIONING:
-            # Matches v2: the slider shows 50 for favourite 1 and 51 for favourite 2
-            position = 50 if number == 1 else 51
+        if position == 0:
+            # A favourite is never fully closed
+            position = 50
         self._position = position
         self.async_write_ha_state()

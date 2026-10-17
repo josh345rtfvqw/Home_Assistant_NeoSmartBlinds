@@ -23,6 +23,7 @@ from custom_components.neosmartblinds.const import (
     CONF_RAIL,
     CONF_START_POSITION,
     CONF_TDBU_EXTENDED,
+    CONF_TILT,
     DOMAIN,
     SUBENTRY_BLIND,
 )
@@ -211,6 +212,7 @@ async def test_add_blind(hass: HomeAssistant, fake_controller: FakeController) -
         CONF_MOTOR_CODE: "no",
         CONF_RAIL: 1,
         CONF_TDBU_EXTENDED: False,
+        CONF_TILT: False,
         CONF_PERCENT_SUPPORT: 1,
         CONF_CLOSE_TIME: 25,
         CONF_START_POSITION: 0,

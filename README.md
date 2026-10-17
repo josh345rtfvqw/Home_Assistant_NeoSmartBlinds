@@ -8,7 +8,7 @@ Version 3 is a rewrite. It is set up from the UI, and existing YAML configuratio
 
 For each blind:
 
-- a **cover** entity: open, close, stop, set position and, where the motor supports it, tilt (micro-step up and down);
+- a **cover** entity: open, close, stop, set position (modes 1 and 2) and, if you turn on **Supports tilt**, tilt (micro-step up and down);
 - a **Favourite position 1** button, plus **Favourite position 2** for NEO (`no`) and Raex (`rx`) motors, or when no motor code is set.
 
 Each blind is its own device, linked to a device for the controller.
@@ -19,7 +19,7 @@ The controller never reports where a blind is, so the position is always an esti
 
 Give the controller a fixed IP address in your router first.
 
-**HACS:** add `https://github.com/mtgeekman/Home_Assistant_NeoSmartBlinds` as a custom repository (type: Integration), install **NeoSmart Blinds**, and restart Home Assistant.
+**HACS:** add `https://github.com/josh345rtfvqw/Home_Assistant_NeoSmartBlinds` as a custom repository (type: Integration), install **NeoSmart Blinds**, and restart Home Assistant.
 
 **Manual:** copy `custom_components/neosmartblinds` into your `config/custom_components/` folder and restart Home Assistant.
 
@@ -61,6 +61,7 @@ On the controller's entry, choose **Add blind**.
 | Motor code | Shown under the blind code in the Neo app, for example `bf`. Pick it from the list (each code is shown with its motor name, such as `bf – Bofu (standard)`), or type it. Some controllers (such as the C-BR300) need it. |
 | Rail | For top-down/bottom-up blinds: top/middle rail, bottom/lower rail, or both. Ordinary blinds use the top rail. |
 | Extended top-down/bottom-up commands | Only for top-down/bottom-up blinds with `mb`, `ra`, `ap` or `db` motors. These use the newer `u4`/`d4`/`x2` command set; `tb` motors use the standard set. |
+| Supports tilt | Turn on for blinds whose slats tilt. Adds the tilt open/close controls (micro-steps). Off by default. |
 | Positioning mode | See below. |
 | Close time | Seconds the blind takes to go from fully open to fully closed. Time it with a stopwatch. |
 | Start position | Optional. The position to assume when Home Assistant starts (modes 1 and 2). Leave empty to restore the last known position. |
@@ -74,7 +75,7 @@ To change a blind or the controller later, use **Reconfigure** on it. A blind ke
 
 | Mode | Set position does | Use with |
 |---|---|---|
-| **0 – Favourites only** | Only `50` (favourite 1) and `51` (favourite 2) are accepted, as in 2.x. Other values give an error. Open, close and stop work as normal. | Any motor. Use the favourite buttons instead. |
+| **0 – Favourites only** | No position. The blind shows up, stop and down buttons instead of a slider; use the favourite buttons for favourite positions. | Any motor. |
 | **1 – Send position to the blind** | Sends the position (`01`–`99`) and the blind goes there by itself. | Motor codes `no`, `db`, `ra`, `rb`, `ap`, `bl`, `mb`, `jo` on the top rail. |
 | **2 – Emulate position** | Moves up or down, then sends stop after the time calculated from the close time. | Any motor. Accuracy depends on the close time. |
 
@@ -107,11 +108,11 @@ If a YAML entry can't be imported (for example, a blind code in the wrong format
 
 ### What changed
 
-- **The tilt slider no longer selects favourites.** Use the **Favourite position 1/2** buttons, or in mode 0 set the position to 50 or 51 as before. Tilt open/close still send micro-steps.
+- **The tilt slider no longer selects favourites.** Use the **Favourite position 1/2** buttons. Tilt open/close still send micro-steps, but only show when **Supports tilt** is turned on for the blind (it's off for imported blinds).
 - Everything is set up from the UI. `protocol` is no longer case-sensitive, and the port is filled in for the protocol (8838 for HTTP, 8839 for TCP).
 - `rail` accepts `3` (both rails), and there is an option for the extended top-down/bottom-up command set (`u4`/`d4`/`x2`).
 - Errors from the controller are shown when a command fails, instead of only being logged. A rejected controller ID starts a re-authentication flow.
-- In mode 0, Home Assistant restores the last position at startup instead of always starting at 50.
+- **Mode 0 no longer has a position.** Setting the position to 50 or 51 to pick a favourite is gone; automations that did this should press the favourite buttons instead. The blind shows up, stop and down buttons, and remembers whether it was last opened or closed.
 - The `requests` dependency is gone. The integration uses Home Assistant's own HTTP session.
 - HACS installs from the repository instead of a release zip.
 

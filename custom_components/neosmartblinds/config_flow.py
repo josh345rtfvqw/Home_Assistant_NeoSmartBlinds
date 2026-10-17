@@ -46,6 +46,7 @@ from .const import (
     CONF_RAIL,
     CONF_START_POSITION,
     CONF_TDBU_EXTENDED,
+    CONF_TILT,
     DEFAULT_CLOSE_TIME,
     DEFAULT_PORTS,
     DOMAIN,
@@ -335,6 +336,7 @@ def _blind_schema() -> vol.Schema:
                 )
             ),
             vol.Required(CONF_TDBU_EXTENDED, default=False): BooleanSelector(),
+            vol.Required(CONF_TILT, default=False): BooleanSelector(),
             vol.Required(
                 CONF_PERCENT_SUPPORT, default=str(LEGACY_POSITIONING)
             ): SelectSelector(
@@ -399,6 +401,7 @@ def _validate_blind(
         CONF_MOTOR_CODE: motor,
         CONF_RAIL: rail,
         CONF_TDBU_EXTENDED: extended,
+        CONF_TILT: bool(user_input.get(CONF_TILT, False)),
         CONF_PERCENT_SUPPORT: percent,
         CONF_CLOSE_TIME: int(user_input[CONF_CLOSE_TIME]),
     }
