@@ -7,11 +7,12 @@ from dataclasses import dataclass, field
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT, Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
+from . import notifications
 from .api import NeoClient
 from .blind import NeoBlind
 from .const import (
@@ -66,6 +67,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: NeoConfigEntry) -> bool:
             hass, entry, subentry, client, group
         )
     entry.runtime_data = runtime
+
+    @callback
+    def _connection_changed() -> None:
+        if client.connected is False:
+            notifications.async_notify_disconnected(hass, entry, client.last_error)
+        elif client.connected:
+            notifications.async_dismiss_disconnected(hass, entry)
+
+    entry.async_on_unload(client.add_listener(_connection_changed))
+    # A reload (for example after fixing the address) checks again from scratch
+    entry.async_on_unload(lambda: notifications.async_dismiss_disconnected(hass, entry))
 
     dr.async_get(hass).async_get_or_create(
         config_entry_id=entry.entry_id,

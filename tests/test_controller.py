@@ -12,9 +12,13 @@ from homeassistant.components.cover import DOMAIN as COVER_DOMAIN
 from homeassistant.const import ATTR_ENTITY_ID, SERVICE_OPEN_COVER, STATE_OFF, STATE_ON
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
-from pytest_homeassistant_custom_component.common import async_fire_time_changed
+from pytest_homeassistant_custom_component.common import (
+    async_fire_time_changed,
+    async_get_persistent_notifications,
+)
 
 from custom_components.neosmartblinds.const import (
     ATTR_COMMAND,
@@ -227,3 +231,119 @@ async def test_migration_keeps_custom_controller_title(
     await hass.async_block_till_done()
     assert entry.title == "Upstairs"
     assert entry.minor_version == 3
+
+
+def _closed_port() -> int:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+async def test_offline_notification(
+    hass: HomeAssistant, fake_controller: FakeController
+) -> None:
+    """A notification says the controller is offline, and goes when it's back."""
+    entry = controller_entry(fake_controller, [blind_subentry()], port=_closed_port())
+    await setup_entry(hass, entry)
+    offline = f"{DOMAIN}_{entry.entry_id}_disconnected"
+    notices = async_get_persistent_notifications(hass)
+    assert notices[offline]["title"] == "Neo Smart Controller offline"
+    assert "Neo Smart Controller (127.0.0.1)" in notices[offline]["message"]
+
+    entry.runtime_data.client.port = fake_controller.http_port
+    await hass.services.async_call(
+        COVER_DOMAIN,
+        SERVICE_OPEN_COVER,
+        {ATTR_ENTITY_ID: "cover.blind_one"},
+        blocking=True,
+    )
+    assert offline not in async_get_persistent_notifications(hass)
+
+
+async def test_reload_dismisses_offline_notification(
+    hass: HomeAssistant, fake_controller: FakeController
+) -> None:
+    """Unloading the controller removes its offline notice."""
+    entry = controller_entry(fake_controller, [blind_subentry()], port=_closed_port())
+    await setup_entry(hass, entry)
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert not async_get_persistent_notifications(hass)
+
+
+async def test_command_failed_notification(
+    hass: HomeAssistant, fake_controller: FakeController
+) -> None:
+    """A failed command raises a notification until a command to it succeeds."""
+    entry = controller_entry(fake_controller, [blind_subentry()])
+    await setup_entry(hass, entry)
+    subentry_id = next(iter(entry.subentries))
+    failed = f"{DOMAIN}_{entry.entry_id}_{subentry_id}_command_failed"
+
+    fake_controller.status = 500
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            COVER_DOMAIN,
+            SERVICE_OPEN_COVER,
+            {ATTR_ENTITY_ID: "cover.blind_one"},
+            blocking=True,
+        )
+    notice = async_get_persistent_notifications(hass)[failed]
+    assert notice["title"] == "Neo Smart Blinds: command failed"
+    assert "**Blind One**" in notice["message"]
+    assert "`021.230-04-up!bf`" in notice["message"]
+    # The controller answered, so it isn't offline
+    assert f"{DOMAIN}_{entry.entry_id}_disconnected" not in (
+        async_get_persistent_notifications(hass)
+    )
+
+    fake_controller.status = None
+    await hass.services.async_call(
+        COVER_DOMAIN,
+        SERVICE_OPEN_COVER,
+        {ATTR_ENTITY_ID: "cover.blind_one"},
+        blocking=True,
+    )
+    assert failed not in async_get_persistent_notifications(hass)
+
+
+async def test_room_command_failed_notification(
+    hass: HomeAssistant, fake_controller: FakeController
+) -> None:
+    """A raw room command that fails is reported under the room's name."""
+    entry = controller_entry(fake_controller, _room_blinds())
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        entry, options={CONF_ROOM_NAMES: {ROOM: "Frontyard"}}
+    )
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    fake_controller.status = 500
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SEND_COMMAND,
+            {ATTR_ENTITY_ID: "cover.frontyard_blinds", ATTR_COMMAND: "mu"},
+            blocking=True,
+        )
+    notice = async_get_persistent_notifications(hass)[
+        f"{DOMAIN}_{entry.entry_id}_{ROOM}_command_failed"
+    ]
+    assert "**Frontyard**" in notice["message"]
+
+
+async def test_bad_hub_id_has_no_command_notification(
+    hass: HomeAssistant, fake_controller: FakeController
+) -> None:
+    """A rejected controller ID is left to the reauth flow."""
+    entry = controller_entry(fake_controller, [blind_subentry()])
+    await setup_entry(hass, entry)
+    fake_controller.hub_id = "something-else"
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            COVER_DOMAIN,
+            SERVICE_OPEN_COVER,
+            {ATTR_ENTITY_ID: "cover.blind_one"},
+            blocking=True,
+        )
+    assert not async_get_persistent_notifications(hass)

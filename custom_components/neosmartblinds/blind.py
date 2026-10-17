@@ -12,6 +12,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 
+from . import notifications
 from .api import BlindCommand, NeoAuthError, NeoClient, NeoError
 from .const import (
     CMD_DOWN,
@@ -37,6 +38,7 @@ from .const import (
     CONF_PARENT,
     CONF_PERCENT_SUPPORT,
     CONF_RAIL,
+    CONF_ROOM_NAMES,
     CONF_START_POSITION,
     CONF_STARTUP_SYNC,
     CONF_TDBU_EXTENDED,
@@ -183,22 +185,33 @@ class NeoBlind:
         motor code (used by the room cover), bypassing the group.
         """
         command = BlindCommand(code or self.code, action, self.motor_code)
+        # Failure notices are kept per blind, or per room for room commands
+        if code is None:
+            target, name = self.subentry_id, self.name
+        else:
+            rooms = self.entry.options.get(CONF_ROOM_NAMES, {})
+            target, name = code, rooms.get(code) or f"Room {code}"
         try:
             if use_group and code is None and self._group is not None:
                 await self._group.async_send(self.unique_id, command)
             else:
                 await self._client.async_send(command)
         except NeoAuthError as err:
+            # The reauth flow tells the user what to fix
             self.entry.async_start_reauth(self.hass)
             raise HomeAssistantError(
                 translation_domain=DOMAIN, translation_key="invalid_hub_id"
             ) from err
         except NeoError as err:
+            notifications.async_notify_command_failed(
+                self.hass, self.entry, target, name, str(command), str(err)
+            )
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="command_failed",
                 translation_placeholders={"command": str(command), "error": str(err)},
             ) from err
+        notifications.async_dismiss_command_failed(self.hass, self.entry, target)
 
     async def async_up(self) -> None:
         """Move up."""
