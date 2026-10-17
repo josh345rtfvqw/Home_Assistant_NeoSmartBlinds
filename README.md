@@ -184,6 +184,12 @@ python3.13 -m venv .venv
 
 The tests run a fake controller on localhost that speaks both HTTP and TCP.
 
+### Releasing
+
+Bump `version` in `custom_components/neosmartblinds/manifest.json` and push to `master`. Once the **Validate** workflow passes, the **Release** workflow tags `v<version>` and publishes a GitHub release listing the commits since the previous one; HACS then offers the update. Pushes that don't change the version don't make a release. You can edit the release notes on GitHub afterwards.
+
+Dependabot opens a pull request when an action used by the workflows has a new version.
+
 ## Reporting a problem
 
 Open an [issue](https://github.com/josh345rtfvqw/Home_Assistant_NeoSmartBlinds/issues) and attach the diagnostics: Settings → Devices & services → NeoSmartBlinds → ⋮ on the controller → **Download diagnostics**. They include your blind settings, the connection status and the last 20 commands with their results; the controller's address and ID are removed.
