@@ -37,6 +37,8 @@ from homeassistant.core import (
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
@@ -233,6 +235,7 @@ class NeoSmartBlindsCover(CoverEntity, RestoreEntity):
     async def async_added_to_hass(self) -> None:
         """Restore position and join the room group."""
         await super().async_added_to_hass()
+        self._move_area_to_device()
         blind = self._blind
         if (
             blind.percent_support != LEGACY_POSITIONING
@@ -246,6 +249,26 @@ class NeoSmartBlindsCover(CoverEntity, RestoreEntity):
         if blind.group is not None:
             self.async_on_remove(blind.group.register(blind.unique_id))
         self.async_on_remove(blind.add_favourite_listener(self._on_favourite))
+
+    def _move_area_to_device(self) -> None:
+        """Move an area set on the entity onto the blind's device.
+
+        v2 blinds had no device, so their area was set on the entity. The cover now
+        takes its name from the device, and HA flags an unnamed entity with its own
+        area, so hand the area to the device (and the favourite buttons with it).
+        """
+        entity = self.registry_entry
+        if entity is None or entity.area_id is None or entity.device_id is None:
+            return
+        dev_reg = dr.async_get(self.hass)
+        if (device := dev_reg.async_get(entity.device_id)) is None:
+            return
+        if device.area_id is None:
+            dev_reg.async_update_device(device.id, area_id=entity.area_id)
+        elif device.area_id != entity.area_id:
+            # The user picked different areas on purpose; leave them alone.
+            return
+        er.async_get(self.hass).async_update_entity(entity.entity_id, area_id=None)
 
     async def async_will_remove_from_hass(self) -> None:
         """Cancel timers."""

@@ -29,12 +29,15 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, State
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
     mock_restore_cache,
 )
 
+from custom_components.neosmartblinds.blind import blind_unique_id
 from custom_components.neosmartblinds.const import DOMAIN
 
 from .conftest import (
@@ -319,3 +322,47 @@ async def test_unload(hass: HomeAssistant, fake_controller: FakeController) -> N
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
     assert hass.states.get(COVER).state == "unavailable"
+
+
+async def test_v2_entity_area_moves_to_device(
+    hass: HomeAssistant, fake_controller: FakeController
+) -> None:
+    """An area set on a migrated v2 entity is handed to the blind's device."""
+    subentry = blind_subentry()
+    area = ar.async_get(hass).async_create("Lounge")
+    ent_reg = er.async_get(hass)
+    # What the v2 YAML platform left behind: an entity with an area, no device.
+    ent_reg.async_get_or_create(
+        COVER_DOMAIN,
+        DOMAIN,
+        blind_unique_id(dict(subentry["data"])),
+        suggested_object_id="blind_one",
+    )
+    ent_reg.async_update_entity(COVER, area_id=area.id)
+
+    await setup_entry(hass, controller_entry(fake_controller, [subentry]))
+
+    entity = ent_reg.async_get(COVER)
+    assert entity.area_id is None
+    device = dr.async_get(hass).async_get(entity.device_id)
+    assert device.area_id == area.id
+
+
+async def test_different_entity_area_is_kept(
+    hass: HomeAssistant, fake_controller: FakeController
+) -> None:
+    """An entity area that differs from its device's area is left alone."""
+    areas = ar.async_get(hass)
+    lounge = areas.async_create("Lounge")
+    porch = areas.async_create("Porch")
+    entry = controller_entry(fake_controller, [blind_subentry()])
+    await setup_entry(hass, entry)
+    ent_reg = er.async_get(hass)
+    entity = ent_reg.async_get(COVER)
+    dr.async_get(hass).async_update_device(entity.device_id, area_id=lounge.id)
+    ent_reg.async_update_entity(COVER, area_id=porch.id)
+
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert ent_reg.async_get(COVER).area_id == porch.id

@@ -9,5 +9,5 @@
   "iot_class": "assumed_state",
   "issue_tracker": "https://github.com/mtgeekman/Home_Assistant_NeoSmartBlinds/issues",
   "requirements": [],
-  "version": "3.0.0"
+  "version": "3.0.1"
 }
