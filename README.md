@@ -13,6 +13,8 @@ For each blind:
 
 Each blind is its own device, linked to a device for the controller.
 
+For each **room code** shared by two or more blinds, there is also a **room cover** (device *Room 021.230-15*, which you can rename). See [Room commands](#room-commands).
+
 The controller never reports where a blind is, so the position is always an estimate based on how long the blind takes to close. The cover is marked as an assumed state, so Home Assistant shows open and close buttons instead of a toggle.
 
 ## Installation
@@ -100,6 +102,8 @@ For HomeKit, use mode 1 or 2 so the position in the Home app makes sense.
 The controller handles one command at a time, and needs about half a second for each. Moving five blinds one by one therefore takes a few seconds.
 
 If several blinds have the same **room code**, and every one of them gets the same command within 250 ms (from a scene, an area, a HomeKit room or an automation), one room command is sent instead. If only some of them get the command, each is sent its own command after the 250 ms wait. Blinds without a room code are sent commands straight away.
+
+The **room cover** uses this: opening, closing, stopping or positioning it sends the command to every blind in the room at once, so the controller gets a single room command and each blind still tracks its own position. Its position is the average of the blinds; it offers a slider only when every blind in the room uses positioning mode 1 or 2. No room cover is made if you've added the room code itself as a blind.
 
 All commands to a controller are queued and spaced at least 0.7 s apart, as the controller's documentation asks.
 

@@ -5,9 +5,15 @@ from __future__ import annotations
 import asyncio
 from datetime import timedelta
 
+from homeassistant.components.cover import (
+    ATTR_CURRENT_POSITION,
+    CoverEntityFeature,
+    CoverState,
+)
 from homeassistant.components.cover import DOMAIN as COVER_DOMAIN
 from homeassistant.const import (
     ATTR_ENTITY_ID,
+    ATTR_SUPPORTED_FEATURES,
     SERVICE_CLOSE_COVER,
     SERVICE_OPEN_COVER,
     SERVICE_STOP_COVER,
@@ -136,3 +142,89 @@ async def test_room_failure_reaches_every_blind(
         raise AssertionError("expected an error")
     for entity in ("cover.left", "cover.middle", "cover.right"):
         assert hass.states.get(entity).state == "open"
+
+
+ROOM_COVER = "cover.room_021_230_15"
+
+
+async def test_room_cover_sends_one_command(
+    hass: HomeAssistant, fake_controller: FakeController
+) -> None:
+    """A room cover is created for a shared room code and moves every member."""
+    await _setup_room(hass, fake_controller)
+    state = hass.states.get(ROOM_COVER)
+    assert state is not None
+    assert state.attributes[ATTR_SUPPORTED_FEATURES] & CoverEntityFeature.SET_POSITION
+
+    await _call(hass, SERVICE_CLOSE_COVER, [ROOM_COVER])
+    await hass.async_block_till_done()
+    assert fake_controller.actions == [f"{ROOM}-dn"]
+    for blind in ("left", "middle", "right"):
+        assert hass.states.get(f"cover.{blind}").state == CoverState.CLOSING
+    assert hass.states.get("cover.elsewhere").state != CoverState.CLOSING
+    assert hass.states.get(ROOM_COVER).state == CoverState.CLOSING
+
+
+async def test_room_cover_position_is_average(
+    hass: HomeAssistant, fake_controller: FakeController
+) -> None:
+    """The room position is the average of its blinds."""
+    await setup_entry(
+        hass,
+        controller_entry(
+            fake_controller,
+            [
+                blind_subentry(
+                    "Left", "021.230-01", parent_group=ROOM, start_position=20
+                ),
+                blind_subentry(
+                    "Right", "021.230-02", parent_group=ROOM, start_position=60
+                ),
+            ],
+        ),
+    )
+    assert hass.states.get(ROOM_COVER).attributes[ATTR_CURRENT_POSITION] == 40
+
+
+async def test_no_room_cover_without_shared_code(
+    hass: HomeAssistant, fake_controller: FakeController
+) -> None:
+    """One blind with a room code, or a room added as a blind, gets no extra cover."""
+    await setup_entry(
+        hass,
+        controller_entry(
+            fake_controller,
+            [
+                blind_subentry("Left", "021.230-01", parent_group=ROOM),
+                blind_subentry("Other", "021.231-01", parent_group="021.231-15"),
+                blind_subentry("Other 2", "021.231-02", parent_group="021.231-15"),
+                blind_subentry("Other room", "021.231-15"),
+            ],
+        ),
+    )
+    assert hass.states.get(ROOM_COVER) is None
+    assert hass.states.get("cover.room_021_231_15") is None
+    assert hass.states.get("cover.other_room") is not None
+
+
+async def test_room_cover_without_positioning(
+    hass: HomeAssistant, fake_controller: FakeController
+) -> None:
+    """Rooms of favourites-only blinds show buttons, not a slider."""
+    await setup_entry(
+        hass,
+        controller_entry(
+            fake_controller,
+            [
+                blind_subentry(
+                    "Left", "021.230-01", parent_group=ROOM, percent_support=0
+                ),
+                blind_subentry("Right", "021.230-02", parent_group=ROOM),
+            ],
+        ),
+    )
+    state = hass.states.get(ROOM_COVER)
+    assert (
+        not state.attributes[ATTR_SUPPORTED_FEATURES] & CoverEntityFeature.SET_POSITION
+    )
+    assert ATTR_CURRENT_POSITION not in state.attributes

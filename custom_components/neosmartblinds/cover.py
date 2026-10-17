@@ -43,6 +43,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
 from homeassistant.helpers.restore_state import RestoreEntity
@@ -50,7 +51,7 @@ from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.util import dt as dt_util
 
-from . import NeoConfigEntry
+from . import NeoConfigEntry, controller_identifier
 from .blind import NeoBlind
 from .const import (
     CONF_BLIND_CODE,
@@ -68,6 +69,7 @@ from .const import (
     SYNC_NONE,
     SYNC_OPEN,
 )
+from .group import NeoGroup
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -149,9 +151,25 @@ async def async_setup_entry(
     entry: NeoConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up a cover for each blind subentry."""
-    for subentry_id, blind in entry.runtime_data.blinds.items():
-        async_add_entities([NeoSmartBlindsCover(blind)], config_subentry_id=subentry_id)
+    """Set up a cover for each blind subentry, and one per shared room code."""
+    runtime = entry.runtime_data
+    covers: list[NeoSmartBlindsCover] = []
+    for subentry_id, blind in runtime.blinds.items():
+        cover = NeoSmartBlindsCover(blind)
+        covers.append(cover)
+        async_add_entities([cover], config_subentry_id=subentry_id)
+
+    blind_codes = {blind.code for blind in runtime.blinds.values()}
+    rooms = [
+        NeoRoomCover(entry, group, members)
+        for code, group in runtime.groups.items()
+        if (members := [c for c in covers if c.blind.group is group])
+        and len(members) >= 2
+        # A room code added as a blind of its own already has a cover
+        and code not in blind_codes
+    ]
+    if rooms:
+        async_add_entities(rooms)
 
 
 @dataclass
@@ -216,6 +234,25 @@ class NeoSmartBlindsCover(CoverEntity, RestoreEntity):
         self._move: _Move | None = None
         self._cancel_progress: Callable[[], None] | None = None
         self._done_job = HassJob(self._async_move_done, cancel_on_shutdown=True)
+        self._state_listeners: list[Callable[[], None]] = []
+
+    @property
+    def blind(self) -> NeoBlind:
+        """Return the blind this cover controls."""
+        return self._blind
+
+    @callback
+    def add_state_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
+        """Call listener whenever this cover writes its state (used by rooms)."""
+        self._state_listeners.append(listener)
+        return lambda: self._state_listeners.remove(listener)
+
+    @callback
+    def async_write_ha_state(self) -> None:
+        """Write the state and tell the room cover, if any."""
+        super().async_write_ha_state()
+        for listener in list(self._state_listeners):
+            listener()
 
     # State ------------------------------------------------------------------
 
@@ -464,3 +501,102 @@ class NeoSmartBlindsCover(CoverEntity, RestoreEntity):
             position = 50
         self._position = position
         self.async_write_ha_state()
+
+
+class NeoRoomCover(CoverEntity):
+    """All blinds sharing a room code, as one cover.
+
+    Commands go to every member cover at once, so each keeps its own position
+    estimate while the room aggregation sends a single channel-15 command.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = None
+    _attr_device_class = CoverDeviceClass.BLIND
+    _attr_assumed_state = True
+    _attr_should_poll = False
+
+    def __init__(
+        self,
+        entry: NeoConfigEntry,
+        group: NeoGroup,
+        members: list[NeoSmartBlindsCover],
+    ) -> None:
+        """Initialise the room cover."""
+        self._members = members
+        self._attr_unique_id = f"{DOMAIN}.{group.code}.room"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, self._attr_unique_id)},
+            name=f"Room {group.code}",
+            manufacturer="Neo Smart Blinds",
+            model="Room (all blinds with this room code)",
+            serial_number=group.code,
+            via_device=controller_identifier(entry),
+        )
+        features = (
+            CoverEntityFeature.OPEN | CoverEntityFeature.CLOSE | CoverEntityFeature.STOP
+        )
+        if all(
+            m.supported_features & CoverEntityFeature.SET_POSITION for m in members
+        ):
+            features |= CoverEntityFeature.SET_POSITION
+        self._attr_supported_features = features
+
+    @property
+    def _active(self) -> list[NeoSmartBlindsCover]:
+        """Members that are enabled and running."""
+        return [m for m in self._members if m.hass is not None]
+
+    @property
+    def available(self) -> bool:
+        """Return whether any member is running."""
+        return bool(self._active)
+
+    @property
+    def current_cover_position(self) -> int | None:
+        """Return the average position of the members."""
+        positions = [m.current_cover_position for m in self._active]
+        if not positions or None in positions:
+            return None
+        return round(sum(positions) / len(positions))
+
+    @property
+    def is_closed(self) -> bool | None:
+        """Return whether every member is closed."""
+        if not (active := self._active):
+            return None
+        return all(m.is_closed for m in active)
+
+    @property
+    def is_opening(self) -> bool:
+        """Return whether any member is opening."""
+        return any(m.is_opening for m in self._active)
+
+    @property
+    def is_closing(self) -> bool:
+        """Return whether any member is closing."""
+        return any(m.is_closing for m in self._active)
+
+    async def async_added_to_hass(self) -> None:
+        """Follow the members' state."""
+        for member in self._members:
+            self.async_on_remove(member.add_state_listener(self.async_write_ha_state))
+
+    async def _async_all(self, method: str, **kwargs: Any) -> None:
+        await asyncio.gather(*(getattr(m, method)(**kwargs) for m in self._active))
+
+    async def async_open_cover(self, **kwargs: Any) -> None:
+        """Open every blind in the room."""
+        await self._async_all("async_open_cover")
+
+    async def async_close_cover(self, **kwargs: Any) -> None:
+        """Close every blind in the room."""
+        await self._async_all("async_close_cover")
+
+    async def async_stop_cover(self, **kwargs: Any) -> None:
+        """Stop every blind in the room."""
+        await self._async_all("async_stop_cover")
+
+    async def async_set_cover_position(self, **kwargs: Any) -> None:
+        """Move every blind in the room to the same position."""
+        await self._async_all("async_set_cover_position", **kwargs)
