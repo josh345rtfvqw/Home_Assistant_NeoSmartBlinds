@@ -36,5 +36,3 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-          # The upstream project has no licence, so there isn't one to declare here
-          ignore: license
